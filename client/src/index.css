@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar,
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-track {
+    background: #0a0510;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb,
+  ::-webkit-scrollbar-thumb {
+    background: #8b2ba6;
+    border-radius: 4px;
+    border: 2px solid #0a0510;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover,
+  ::-webkit-scrollbar-thumb:hover {
+    background: #c87ae8;
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.8); }
+}
+
+.mafia-glow {
+  animation: pulseGlow 2s infinite;
+}
+
+:root {
+  --color-sky-top: #5a1a9e;
+  --color-sky-bottom: #f26fd2;
+  --color-cloud: #c87ae8;
+  --color-skyline: #8b2ba6;
+  --color-window: #ffd84a;
+  --color-asphalt: #2a1d3f;
+  --color-curb: #a99fd6;
+  --color-sidewalk: #7b72b3;
+  --color-title: #ffb3f0;
+  --color-title-shadow: #6d1c96;
+  --color-bubble: #fffaf0;
+  --color-bubble-ink: #1a1026;
+}
+
+@keyframes drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes blink {
+  0%, 45% { opacity: 1; }
+  50%, 95% { opacity: 0.15; }
+  100% { opacity: 1; }
+}
+@keyframes flicker {
+  0%, 60% { opacity: 1; }
+  62%, 66% { opacity: 0.2; }
+  68%, 100% { opacity: 1; }
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-4deg); }
+  75% { transform: rotate(4deg); }
+}
+
+.animate-drift { animation: drift 60s linear infinite; }
+.animate-drift-slow { animation: drift 95s linear infinite; }
+.animate-blink { animation: blink 2.4s steps(1, end) infinite; }
+.animate-flicker { animation: flicker 5s steps(1, end) infinite; }
+.animate-bob { animation: bob 1.6s ease-in-out infinite; }
+.animate-pop { animation: pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.animate-wiggle { animation: wiggle 0.5s ease-in-out both; }
+

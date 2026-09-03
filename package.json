@@ -1,0 +1,16 @@
+{
+  "name": "code-mafia",
+  "version": "1.0.0",
+  "description": "Code Mafia - Multiplayer Collaborative Debugging Challenge",
+  "main": "server/server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "node server/server.js",
+    "client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

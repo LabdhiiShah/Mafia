@@ -1,0 +1,19 @@
+{
+  "name": "code-mafia-server",
+  "version": "1.0.0",
+  "description": "Backend Socket.IO & Code Execution server for Code Mafia",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "diff": "^5.2.0",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "pg": "^8.23.0",
+    "socket.io": "^4.7.5",
+    "uuid": "^9.0.1"
+  }
+}
