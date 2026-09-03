@@ -119,7 +119,7 @@ export default function GameHeader() {
           <span>Buy Hint</span>
         </button>
 
-        {myPlayer && (
+        {myPlayer ? (
           <div className="relative">
             <button
               onClick={() => setShowRoleInfo(!showRoleInfo)}
@@ -157,6 +157,10 @@ export default function GameHeader() {
                 )}
               </div>
             )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-blue-500/50 bg-blue-950/40 text-blue-400 text-xs font-bold font-mono">
+            🛡️ DEVELOPER
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Character } from '../Landing/Character';
 
 export function SignUpPage({ onNavigateToLogin, onSignupSuccess, onBackToLanding }) {
@@ -15,6 +15,7 @@ export function SignUpPage({ onNavigateToLogin, onSignupSuccess, onBackToLanding
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [status, setStatus] = useState('idle');
+  const [serverError, setServerError] = useState('');
   const [mounted, setMounted] = useState(false);
 
   // Character Interaction States
@@ -53,21 +54,81 @@ export function SignUpPage({ onNavigateToLogin, onSignupSuccess, onBackToLanding
     const val = type === 'checkbox' ? checked : value;
     setFormData(prev => ({ ...prev, [name]: val }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+    if (serverError) {
+      setServerError('');
+      setStatus('idle');
+    }
   };
 
-  const handleSubmit = (e) => {
+  const validate = () => {
+    const newErrors = {};
+    if (!formData.playerName || formData.playerName.trim().length < 3) {
+      newErrors.playerName = 'Player name must be at least 3 characters';
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!formData.email || !emailRegex.test(formData.email.trim())) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+    if (!formData.password || formData.password.length < 4) {
+      newErrors.password = 'Password must be at least 4 characters';
+    }
+    if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+    if (!formData.terms) {
+      newErrors.terms = 'You must agree to the Terms of Service';
+    }
+    return newErrors;
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
     setStatus('loading');
-    
-    // Simulate API call
-    setTimeout(() => {
+    setServerError('');
+
+    try {
+      const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000' : '';
+      const response = await fetch(`${API_BASE}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: formData.playerName.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+          avatar: 'avatar_1'
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.token) {
+        setServerError(data.error || 'Account creation failed. Please try again.');
+        setStatus('error');
+        return;
+      }
+
+      // Store Auth Token
+      localStorage.setItem('code_mafia_token', data.token);
+      localStorage.setItem('code_mafia_user', JSON.stringify(data.user));
+      setStatus('success');
+
       if (onSignupSuccess) {
-        onSignupSuccess(formData);
+        onSignupSuccess(data.user);
       } else if (onNavigateToLogin) {
         onNavigateToLogin();
       }
-    }, 1000);
+    } catch (err) {
+      console.error('Signup error:', err);
+      setServerError('Unable to connect to authentication server. Check connection.');
+      setStatus('error');
+    }
   };
 
   const isValid = true;
@@ -167,6 +228,13 @@ export function SignUpPage({ onNavigateToLogin, onSignupSuccess, onBackToLanding
             <h1 className="font-pixel text-2xl text-white mb-3 [text-shadow:0_0_20px_rgba(255,255,255,0.8),0_0_15px_rgba(168,85,247,0.8)]">CREATE YOUR IDENTITY</h1>
             <p className="text-white text-xs font-pixel tracking-wider [text-shadow:0_0_10px_rgba(255,255,255,0.5)]">Join the network. Choose your identity wisely.</p>
           </div>
+
+          {serverError && (
+            <div className="mb-6 p-4 bg-red-900/20 border border-red-500/30 rounded-md flex items-center gap-3 animate-in zoom-in-95 duration-200">
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+              <p className="text-white font-pixel text-[10px]">{serverError}</p>
+            </div>
+          )}
 
           <div className="space-y-5">
             

@@ -68,23 +68,66 @@ export function LoginPage({ onNavigateToSignup, onLoginSuccess, onBackToLanding 
     }
   };
 
-  const handleSubmit = (e) => {
+  const validate = () => {
+    const newErrors = {};
+    if (!formData.username || !formData.username.trim()) {
+      newErrors.username = 'Player name is required';
+    }
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    }
+    return newErrors;
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
 
     setStatus('loading');
     setServerError('');
     
-    // Simulate backend auth check
-    setTimeout(() => {
+    try {
+      const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000' : '';
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: formData.username.trim(),
+          password: formData.password
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.token) {
+        setServerError(data.error || 'Authentication failed. Please check your credentials.');
+        setStatus('error');
+        return;
+      }
+
+      // Save auth session
+      localStorage.setItem('code_mafia_token', data.token);
+      localStorage.setItem('code_mafia_user', JSON.stringify(data.user));
+
       setStatus('success');
       setLoginSuccessAnim(true);
       
       setTimeout(() => {
         if (onLoginSuccess) {
-          onLoginSuccess(formData);
+          onLoginSuccess(data.user);
         }
       }, 700);
-    }, 300);
+
+    } catch (err) {
+      console.error('Login error:', err);
+      setServerError('Unable to connect to authentication server. Check connection.');
+      setStatus('error');
+    }
   };
 
   return (

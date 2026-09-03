@@ -11,6 +11,8 @@ const pool = new Pool({
 });
 
 let isConnected = false;
+const inMemoryUsers = new Map();
+let nextUserId = 100;
 
 // Initialize Database Tables
 async function initDB() {
@@ -28,7 +30,20 @@ async function initDB() {
 
 // Create new user with password hash
 async function createUser(username, passwordHash, avatar = 'avatar_1') {
-  if (!isConnected) return null;
+  if (!isConnected) {
+    const user = {
+      id: nextUserId++,
+      username,
+      password_hash: passwordHash,
+      avatar,
+      total_games: 0,
+      dev_wins: 0,
+      mafia_wins: 0,
+      created_at: new Date()
+    };
+    inMemoryUsers.set(username.toLowerCase(), user);
+    return user;
+  }
   const res = await pool.query(
     `INSERT INTO users (username, password_hash, avatar)
      VALUES ($1, $2, $3)
@@ -40,7 +55,9 @@ async function createUser(username, passwordHash, avatar = 'avatar_1') {
 
 // Find user by username
 async function findUserByUsername(username) {
-  if (!isConnected) return null;
+  if (!isConnected) {
+    return inMemoryUsers.get(username.toLowerCase()) || null;
+  }
   const res = await pool.query(
     `SELECT * FROM users WHERE username = $1`,
     [username]
@@ -50,7 +67,12 @@ async function findUserByUsername(username) {
 
 // Find user by ID
 async function findUserById(id) {
-  if (!isConnected) return null;
+  if (!isConnected) {
+    for (const u of inMemoryUsers.values()) {
+      if (u.id === Number(id)) return u;
+    }
+    return null;
+  }
   const res = await pool.query(
     `SELECT id, username, avatar, total_games, dev_wins, mafia_wins, created_at FROM users WHERE id = $1`,
     [id]
