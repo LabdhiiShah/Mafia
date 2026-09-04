@@ -7,7 +7,7 @@ export default function GameOverScreen() {
   const { room, myPlayer } = useSocket();
 
   useEffect(() => {
-    if (room?.winner === 'DEVELOPERS') {
+    if (room?.winner === 'CIVILIANS' || room?.winner === 'DEVELOPERS') {
       confetti({
         particleCount: 120,
         spread: 70,
@@ -18,7 +18,7 @@ export default function GameOverScreen() {
 
   if (!room) return null;
 
-  const isDevWin = room.winner === 'DEVELOPERS';
+  const isCivWin = room.winner === 'CIVILIANS' || room.winner === 'DEVELOPERS';
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-100 relative">
@@ -28,12 +28,12 @@ export default function GameOverScreen() {
           <div className="flex justify-center mb-4">
             <div
               className={`w-20 h-20 rounded-full flex items-center justify-center border-4 ${
-                isDevWin
+                isCivWin
                   ? 'bg-emerald-950/40 border-emerald-500 text-emerald-400 shadow-emerald-900/50'
                   : 'bg-red-950/40 border-red-500 text-red-500 shadow-red-900/50 mafia-glow'
               }`}
             >
-              {isDevWin ? <Trophy className="w-10 h-10" /> : <Skull className="w-10 h-10" />}
+              {isCivWin ? <Trophy className="w-10 h-10" /> : <Skull className="w-10 h-10" />}
             </div>
           </div>
 
@@ -42,10 +42,10 @@ export default function GameOverScreen() {
           </span>
           <h1
             className={`text-5xl font-black tracking-tight mt-1 mb-2 ${
-              isDevWin ? 'text-emerald-400' : 'text-red-500'
+              isCivWin ? 'text-emerald-400' : 'text-red-500'
             }`}
           >
-            {isDevWin ? 'DEVELOPERS VICTORY!' : 'MAFIA SABOTAGE SUCCESSFUL!'}
+            {isCivWin ? 'CIVILIANS VICTORY!' : 'MAFIA SABOTAGE SUCCESSFUL!'}
           </h1>
           <p className="text-slate-300 text-sm max-w-xl mx-auto font-sans leading-relaxed">
             {room.winningReason}
@@ -61,7 +61,7 @@ export default function GameOverScreen() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {room.players.map((p) => {
               const isMafia = p.role === 'MAFIA';
-              const isQA = p.role === 'QA_INSPECTOR';
+              const isDetective = p.role === 'DETECTIVE' || p.role === 'QA_INSPECTOR';
 
               return (
                 <div
@@ -69,16 +69,16 @@ export default function GameOverScreen() {
                   className={`p-4 rounded-2xl border flex items-center justify-between ${
                     isMafia
                       ? 'bg-red-950/20 border-red-500/40 text-red-300'
-                      : isQA
+                      : isDetective
                       ? 'bg-purple-950/20 border-purple-500/40 text-purple-300'
                       : 'bg-blue-950/20 border-blue-500/40 text-blue-300'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">{isMafia ? '💀' : isQA ? '👁️' : '🛡️'}</span>
+                    <span className="text-2xl">{isMafia ? '💀' : isDetective ? '👁️' : '🛡️'}</span>
                     <div>
                       <span className="font-bold text-sm block text-white">{p.name}</span>
-                      <span className="text-xs font-mono font-semibold">{p.role}</span>
+                      <span className="text-xs font-mono font-semibold">{isMafia ? 'MAFIA' : isDetective ? 'DETECTIVE' : 'CIVILIAN'}</span>
                     </div>
                   </div>
 

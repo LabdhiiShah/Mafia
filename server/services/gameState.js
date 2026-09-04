@@ -173,12 +173,16 @@ class GameStateEngine {
 
     const hasWon = this.checkVictoryConditions(roomCode);
     if (!hasWon) {
-      room.round++;
-      room.status = 'CODING_PHASE';
-      room.timerSeconds = room.settings.codingDuration;
+      setTimeout(() => {
+        const r = roomManager.getRoom(roomCode);
+        if (r && r.status !== 'GAME_OVER') {
+          roomManager.advanceRoomRound(roomCode);
+          r.status = 'CODING_PHASE';
+          r.timerSeconds = r.settings.codingDuration;
+          this.broadcastRoomUpdate(roomCode);
+        }
+      }, 5000);
     }
-
-    this.broadcastRoomUpdate(roomCode);
   }
 
   checkVictoryConditions(roomCode) {
@@ -187,31 +191,31 @@ class GameStateEngine {
 
     const alivePlayers = Array.from(room.players.values()).filter(p => p.isAlive);
     const aliveMafia = alivePlayers.filter(p => p.role === 'MAFIA');
-    const aliveDevs = alivePlayers.filter(p => p.role === 'DEVELOPER' || p.role === 'QA_INSPECTOR');
+    const aliveCivilians = alivePlayers.filter(p => p.role === 'CIVILIAN' || p.role === 'DETECTIVE' || p.role === 'DEVELOPER' || p.role === 'QA_INSPECTOR');
 
-    // Condition 1: Developers win if 100% of both Public & Hidden unit tests pass!
+    // Condition 1: Civilians win if 100% of test suites pass!
     if (room.testResults && room.testResults.total > 0 && room.testResults.passed === room.testResults.total) {
       room.status = 'GAME_OVER';
-      room.winner = 'DEVELOPERS';
-      room.winningReason = '100% of Public AND Hidden edge-case test suites passed! Codebase fully stabilized.';
+      room.winner = 'CIVILIANS';
+      room.winningReason = '100% of test suites passed! Codebase fully stabilized.';
       this.endGame(roomCode);
       return true;
     }
 
-    // Condition 2: Developers win if all Mafia members are eliminated
+    // Condition 2: Civilians win if all Mafia members are eliminated
     if (aliveMafia.length === 0) {
       room.status = 'GAME_OVER';
-      room.winner = 'DEVELOPERS';
-      room.winningReason = 'All Mafia saboteurs have been identified and eliminated from the team!';
+      room.winner = 'CIVILIANS';
+      room.winningReason = 'All Mafia saboteurs have been identified and voted out!';
       this.endGame(roomCode);
       return true;
     }
 
-    // Condition 3: Mafia win if Mafia count equals or exceeds Dev count
-    if (aliveMafia.length >= aliveDevs.length) {
+    // Condition 3: Mafia win if Mafia count equals or exceeds Civilian count
+    if (aliveMafia.length >= aliveCivilians.length) {
       room.status = 'GAME_OVER';
       room.winner = 'MAFIA';
-      room.winningReason = 'Mafia saboteurs gained majority control over the software project team!';
+      room.winningReason = 'Mafia saboteurs gained majority control over the team!';
       this.endGame(roomCode);
       return true;
     }

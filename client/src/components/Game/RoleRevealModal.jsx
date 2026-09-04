@@ -8,7 +8,7 @@ export default function RoleRevealModal() {
   if (!myPlayer) return null;
 
   const isMafia = myPlayer.role === 'MAFIA';
-  const isQA = myPlayer.role === 'QA_INSPECTOR';
+  const isDetective = myPlayer.role === 'DETECTIVE' || myPlayer.role === 'QA_INSPECTOR';
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
@@ -24,14 +24,14 @@ export default function RoleRevealModal() {
             className={`w-24 h-24 rounded-full flex items-center justify-center border-4 shadow-xl ${
               isMafia
                 ? 'bg-red-950/40 border-red-500 text-red-500 shadow-red-900/50 mafia-glow'
-                : isQA
+                : isDetective
                 ? 'bg-purple-950/40 border-purple-500 text-purple-400 shadow-purple-900/50'
                 : 'bg-blue-950/40 border-blue-500 text-blue-400 shadow-blue-900/50'
             }`}
           >
             {isMafia ? (
               <Skull className="w-12 h-12" />
-            ) : isQA ? (
+            ) : isDetective ? (
               <Eye className="w-12 h-12" />
             ) : (
               <Shield className="w-12 h-12" />
@@ -45,10 +45,10 @@ export default function RoleRevealModal() {
         </span>
         <h2
           className={`text-4xl font-extrabold tracking-tight mt-1 mb-3 ${
-            isMafia ? 'text-red-500' : isQA ? 'text-purple-400' : 'text-blue-400'
+            isMafia ? 'text-red-500' : isDetective ? 'text-purple-400' : 'text-blue-400'
           }`}
         >
-          {isMafia ? 'MAFIA SABOTEUR' : isQA ? 'QA INSPECTOR' : 'INNOCENT DEVELOPER'}
+          {isMafia ? 'MAFIA SABOTEUR' : isDetective ? 'DETECTIVE' : 'CIVILIAN'}
         </h2>
 
         {/* Secret Objective Card */}

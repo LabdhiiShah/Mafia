@@ -3,19 +3,39 @@ import { X, Search } from 'lucide-react';
 
 export function JoinGameModal({ onClose, onProceedToLobby }) {
   const [code, setCode] = useState('');
-  const [status, setStatus] = useState('idle');
-
-  const handleJoin = () => {
-    if (code.length !== 6) return;
-    setStatus('connecting');
-    setTimeout(() => {
-      if (onProceedToLobby) {
-        onProceedToLobby({ caseCode: code });
-      } else {
-        setStatus('error');
+  const [playerName, setPlayerName] = useState(() => {
+    try {
+      const raw = localStorage.getItem('code_mafia_user');
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u?.username) return u.username;
       }
-    }, 1000);
+    } catch (e) {}
+    return '';
+  });
+  const [status, setStatus] = useState('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const handleJoin = async () => {
+    const trimmed = code.trim().toUpperCase();
+    if (trimmed.length < 3) return;
+    setStatus('connecting');
+    setErrorMessage('');
+    
+    if (onProceedToLobby) {
+      const res = await onProceedToLobby({ 
+        caseCode: trimmed,
+        playerName: playerName.trim() || undefined
+      });
+      if (res && res.success === false) {
+        setStatus('error');
+        setErrorMessage(res.error || 'Failed to join room. Please check the room code.');
+        return;
+      }
+    }
   };
+
+  const isValid = code.trim().length >= 3;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -29,25 +49,34 @@ export function JoinGameModal({ onClose, onProceedToLobby }) {
 
         <div className="text-center mb-8">
           <h2 className="font-pixel text-xl text-white mb-2 [text-shadow:0_0_10px_rgba(168,85,247,0.5)]">JOIN INVESTIGATION</h2>
-          <p className="text-purple-300/60 text-sm">Enter the 6-character case code.</p>
+          <p className="text-purple-300/60 text-xs font-pixel">Enter developer handle & case code.</p>
         </div>
 
         {status === 'idle' && (
-          <div className="space-y-6">
-            <div className="relative">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-pixel text-purple-400 mb-2 uppercase">Developer Handle</label>
+              <input 
+                type="text" 
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="Enter handle (e.g. CyberCoder)"
+                className="w-full bg-black/50 border border-purple-500/30 rounded-md px-4 py-3 font-pixel text-xs text-white placeholder-purple-900 focus:outline-none focus:border-purple-400 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-pixel text-purple-400 mb-2 uppercase">Case Code</label>
               <input 
                 type="text" 
                 value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
-                placeholder="XXXXXX"
-                className="w-full bg-black/50 border border-purple-500/30 rounded-md p-4 text-center font-pixel text-2xl tracking-[0.5em] text-white placeholder-purple-900 focus:outline-none focus:border-purple-400 focus:[box-shadow:0_0_15px_rgba(168,85,247,0.3)] transition-all"
+                onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 12))}
+                placeholder="MAFIA-4921"
+                className="w-full bg-black/50 border border-purple-500/30 rounded-md p-4 text-center font-pixel text-xl tracking-[0.2em] text-white placeholder-purple-900 focus:outline-none focus:border-purple-400 focus:[box-shadow:0_0_15px_rgba(168,85,247,0.3)] transition-all"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-pixel text-purple-500/50">
-                {code.length}/6
-              </span>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-4 pt-2">
               <button 
                 onClick={onClose}
                 className="flex-1 py-3 bg-transparent border border-purple-500/30 text-purple-300 font-pixel text-[10px] rounded-sm hover:bg-purple-900/30 transition-all cursor-pointer"
@@ -56,9 +85,9 @@ export function JoinGameModal({ onClose, onProceedToLobby }) {
               </button>
               <button 
                 onClick={handleJoin}
-                disabled={code.length !== 6}
+                disabled={!isValid}
                 className={`flex-1 py-3 font-pixel text-[10px] rounded-sm transition-all cursor-pointer ${
-                  code.length === 6 
+                  isValid 
                     ? 'bg-purple-600 text-white border border-purple-400 [box-shadow:0_0_15px_rgba(168,85,247,0.5)] hover:bg-purple-500' 
                     : 'bg-purple-900/20 text-purple-500/50 border border-purple-900/50 cursor-not-allowed'
                 }`}
@@ -79,13 +108,13 @@ export function JoinGameModal({ onClose, onProceedToLobby }) {
         {status === 'error' && (
           <div className="flex flex-col items-center justify-center py-4 space-y-6 text-center">
             <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
-              <p className="text-red-400 text-sm">Backend connection required to join this game.</p>
+              <p className="text-red-400 font-pixel text-xs">{errorMessage || 'Backend connection required to join this game.'}</p>
             </div>
             <button 
-              onClick={onClose}
+              onClick={() => setStatus('idle')}
               className="px-6 py-3 bg-purple-900/40 border border-purple-500/30 text-purple-200 font-pixel text-[10px] rounded-sm hover:bg-purple-800/50 transition-all cursor-pointer"
             >
-              CLOSE
+              TRY AGAIN
             </button>
           </div>
         )}

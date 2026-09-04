@@ -52,7 +52,14 @@ export default function GameHeader() {
           </span>
           <div>
             <h1 className="text-sm font-black tracking-wider text-white">CODE MAFIA</h1>
-            <span className="text-[10px] text-slate-400 font-mono">ROUND {room.round}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-purple-400 font-mono font-bold">ROUND {room.round}</span>
+              {room.settings?.challengeName && (
+                <span className="text-[10px] text-slate-300 font-mono truncate max-w-[200px]">
+                  • {room.settings.challengeName} ({room.settings.difficulty || 'Easy'})
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -126,12 +133,12 @@ export default function GameHeader() {
               className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold font-mono transition ${
                 myPlayer.role === 'MAFIA'
                   ? 'bg-red-950/40 border-red-500/50 text-red-400 hover:bg-red-900/40'
-                  : myPlayer.role === 'QA_INSPECTOR'
+                  : myPlayer.role === 'DETECTIVE' || myPlayer.role === 'QA_INSPECTOR'
                   ? 'bg-purple-950/40 border-purple-500/50 text-purple-400 hover:bg-purple-900/40'
                   : 'bg-blue-950/40 border-blue-500/50 text-blue-400 hover:bg-blue-900/40'
               }`}
             >
-              {myPlayer.role === 'MAFIA' ? '💀 MAFIA' : myPlayer.role === 'QA_INSPECTOR' ? '👁️ QA INSPECTOR' : '🛡️ DEVELOPER'}
+              {myPlayer.role === 'MAFIA' ? '💀 MAFIA' : (myPlayer.role === 'DETECTIVE' || myPlayer.role === 'QA_INSPECTOR') ? '🕵️ DETECTIVE' : '🛡️ CIVILIAN'}
               <HelpCircle className="w-3.5 h-3.5 opacity-60" />
             </button>
 

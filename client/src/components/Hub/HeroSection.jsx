@@ -5,27 +5,25 @@ export function HeroSection({ onCreateClick, onJoinClick, onQuickMatchClick }) {
     <section id="home" className="relative flex flex-col items-center justify-center min-h-[80vh] px-4 text-center pt-24 overflow-hidden">
       {/* Background glow & particles */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[800px] h-[800px] bg-purple-600/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
+        <div className="w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[120px] mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
       </div>
 
       <div className="relative z-10 flex flex-col items-center max-w-4xl mx-auto space-y-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1 text-[10px] tracking-widest text-purple-300 border border-purple-500/30 bg-purple-900/30 rounded-full backdrop-blur-sm font-pixel">
-          <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
-          NEON CITY // NETWORK ONLINE
-        </div>
-
+        <p></p>
+        <p></p>
         <div className="space-y-2">
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white font-pixel leading-tight [text-shadow:0_0_40px_rgba(168,85,247,0.5)]">
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-purple-100/90 font-pixel leading-tight [text-shadow:0_0_15px_rgba(168,85,247,0.25)]">
             DEBUG.<br className="md:hidden" /> COLLABORATE.<br className="md:hidden" /> BETRAY.
           </h1>
         </div>
 
         <div className="space-y-4 max-w-2xl mx-auto">
+          <p></p>
           <p className="text-lg md:text-xl text-purple-200/90 font-medium tracking-wide">
-            A multiplayer debugging game where you don't know who you can trust.
+            The bug isn't your only problem.
           </p>
           <p className="text-sm md:text-base text-purple-300/60 leading-relaxed max-w-xl mx-auto">
-            Work together to repair a broken codebase, investigate suspicious activity and eliminate the Mafia before the system collapses.
+            Ship the fix Catch the spy
           </p>
         </div>
 

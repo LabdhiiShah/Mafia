@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { X, Copy, Share2, Play } from 'lucide-react';
 
 export function CreateGameModal({ onClose, onProceedToLobby }) {
-  const [mode, setMode] = useState('ONLINE');
   const [players, setPlayers] = useState(8);
   const [difficulty, setDifficulty] = useState('MEDIUM');
   const [language, setLanguage] = useState('PYTHON');
-  const [duration, setDuration] = useState('15 MIN');
+  const [durationSeconds, setDurationSeconds] = useState(300);
   const [intensity, setIntensity] = useState('MEDIUM');
   const [victory, setVictory] = useState('STANDARD');
   const [created, setCreated] = useState(false);
@@ -19,14 +18,23 @@ export function CreateGameModal({ onClose, onProceedToLobby }) {
   };
 
   const handleCreate = () => {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const code = 'MAFIA-' + Math.floor(1000 + Math.random() * 9000);
     setCaseCode(code);
     setCreated(true);
   };
 
+  const [visibility, setVisibility] = useState('PUBLIC');
+
   const handleEnterLobby = () => {
     if (onProceedToLobby) {
-      onProceedToLobby({ mode, players, difficulty, language, caseCode });
+      onProceedToLobby({ 
+        players, 
+        difficulty, 
+        language, 
+        caseCode, 
+        durationSeconds,
+        isPublic: visibility === 'PUBLIC'
+      });
     }
   };
 
@@ -75,22 +83,6 @@ export function CreateGameModal({ onClose, onProceedToLobby }) {
           </div>
 
           <div className="space-y-10">
-            {/* Mode */}
-            <section>
-              <h3 className="font-pixel text-[10px] text-purple-400 mb-4">GAME MODE</h3>
-              <div className="flex gap-4">
-                {['ONLINE', 'LOCAL'].map(m => (
-                  <button 
-                    key={m} 
-                    onClick={() => setMode(m)}
-                    className={`flex-1 py-3 font-pixel text-[10px] rounded-sm border transition-all cursor-pointer ${mode === m ? 'bg-purple-600/30 border-purple-400 text-white [box-shadow:0_0_15px_rgba(168,85,247,0.3)]' : 'bg-black/30 border-purple-900 text-purple-500/70 hover:border-purple-500/50'}`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            </section>
-
             {/* Players */}
             <section>
               <div className="flex justify-between mb-4">
@@ -109,11 +101,26 @@ export function CreateGameModal({ onClose, onProceedToLobby }) {
               </div>
             </section>
 
+            {/* SPRINT DURATION INPUT IN SECONDS */}
+            <section>
+              <h3 className="font-pixel text-[10px] text-purple-400 mb-2">SPRINT TIME (IN SECONDS)</h3>
+              <p className="text-xs text-purple-300/50 mb-3">Enter the coding sprint duration in seconds.</p>
+              <input
+                type="number"
+                min="10"
+                max="3600"
+                value={durationSeconds}
+                onChange={(e) => setDurationSeconds(Math.max(10, parseInt(e.target.value) || 0))}
+                placeholder="Enter time in seconds (e.g. 300)"
+                className="w-full bg-black/70 border border-purple-500/40 rounded-md px-4 py-3 text-white placeholder-purple-800 font-pixel text-xs focus:outline-none focus:border-purple-400 focus:[box-shadow:0_0_20px_rgba(168,85,247,0.4)] transition-all"
+              />
+            </section>
+
             {/* Options grids */}
             {[
+              { label: 'ROOM VISIBILITY', state: visibility, set: setVisibility, opts: ['PUBLIC', 'PRIVATE'], desc: 'PUBLIC allows Quick Match players to join automatically. PRIVATE requires Case Code.' },
               { label: 'DIFFICULTY', state: difficulty, set: setDifficulty, opts: ['EASY', 'MEDIUM', 'HARD', 'EXPERT'] },
               { label: 'LANGUAGE', state: language, set: setLanguage, opts: ['PYTHON', 'JAVASCRIPT', 'TYPESCRIPT', 'JAVA', 'C++', 'C#', 'GO', 'RUST'], desc: 'All players use the selected language.' },
-              { label: 'DURATION', state: duration, set: setDuration, opts: ['10 MIN', '15 MIN', '20 MIN', '30 MIN'] },
               { label: 'BUG INTENSITY', state: intensity, set: setIntensity, opts: ['LOW', 'MEDIUM', 'HIGH'] },
               { label: 'VICTORY CONDITION', state: victory, set: setVictory, opts: ['STANDARD', 'DEBUG RUSH', 'SURVIVAL'] },
             ].map(group => (
@@ -144,12 +151,11 @@ export function CreateGameModal({ onClose, onProceedToLobby }) {
           
           <div className="flex-1 space-y-6">
             {[
-              { label: 'MODE', val: mode },
               { label: 'PLAYERS', val: `${players} PLAYERS` },
               { label: 'MAFIA', val: `${getMafiaCount(players)} MAFIA`, color: 'text-red-400' },
               { label: 'DIFFICULTY', val: difficulty },
               { label: 'LANGUAGE', val: language },
-              { label: 'DURATION', val: duration },
+              { label: 'SPRINT TIMER', val: `${durationSeconds} SECONDS` },
               { label: 'BUG INTENSITY', val: intensity },
               { label: 'VICTORY', val: victory },
             ].map(item => (

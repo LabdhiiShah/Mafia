@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import { Shield, Eye, Clock, FileCode, Play, User, GitCommit, X } from 'lucide-react';
 
-export default function AuditTimeline({ onClose }) {
+export default function AuditTimeline({ onClose, isEmbedded = false }) {
   const { fetchAuditLogs, fetchFileDiffs, activeFile } = useSocket();
   const [logs, setLogs] = useState([]);
   const [selectedFileHistory, setSelectedFileHistory] = useState([]);
@@ -22,10 +22,9 @@ export default function AuditTimeline({ onClose }) {
     setLoading(false);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-3xl h-[85vh] flex flex-col shadow-2xl overflow-hidden">
-        {/* Header */}
+  const content = (
+    <div className={`w-full ${isEmbedded ? 'h-full' : 'max-w-5xl h-[85vh]'} bg-slate-900 border border-slate-800 rounded-3xl flex flex-col shadow-2xl overflow-hidden`}>
+      {/* Header */}
         <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="p-2 bg-purple-500/10 text-purple-400 border border-purple-500/30 rounded-xl">
@@ -171,6 +170,13 @@ export default function AuditTimeline({ onClose }) {
           </div>
         </div>
       </div>
+  );
+
+  if (isEmbedded) return content;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      {content}
     </div>
   );
 }

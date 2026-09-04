@@ -1,136 +1,4 @@
 const challenges = {
-  'shopping-cart': {
-    id: 'shopping-cart',
-    name: 'E-Commerce Shopping Cart API',
-    language: 'javascript',
-    difficulty: 'Easy',
-    description: 'Fix pricing, discount coupons, tax calculation, and BOGO logic in the shopping cart module.',
-    files: {
-      'cart.js': `/**
- * E-Commerce Shopping Cart Module
- */
-
-class ShoppingCart {
-  constructor() {
-    this.items = [];
-    this.appliedDiscount = null;
-    this.taxRate = 0.08;
-    this.shippingFee = 5.99;
-  }
-
-  addItem(name, price, quantity = 1) {
-    if (price <= 0 || quantity <= 0) {
-      throw new Error("Invalid item price or quantity");
-    }
-    const existing = this.items.find(item => item.name === name);
-    if (existing) {
-      // BUG 1: Overrides quantity instead of accumulating it
-      existing.quantity = quantity;
-    } else {
-      this.items.push({ name, price, quantity });
-    }
-  }
-
-  calculateSubtotal() {
-    // BUG 2: Ignores quantity in subtotal!
-    return this.items.reduce((total, item) => total + item.price, 0);
-  }
-
-  applyCoupon(code) {
-    if (code === 'SAVE10') {
-      this.appliedDiscount = { type: 'PERCENT', amount: 10 };
-    } else if (code === 'BOGO') {
-      this.appliedDiscount = { type: 'BOGO', amount: 0 };
-    } else {
-      throw new Error("Invalid coupon code");
-    }
-  }
-
-  calculateDiscountAmount(subtotal) {
-    if (!this.appliedDiscount) return 0;
-    if (this.appliedDiscount.type === 'PERCENT') {
-      // BUG 3: Divides by 10 instead of 100
-      return subtotal * (this.appliedDiscount.amount / 10);
-    }
-    if (this.appliedDiscount.type === 'BOGO') {
-      let freeAmount = 0;
-      this.items.forEach(item => {
-        if (item.quantity % 2 !== 0) {
-          throw new Error("BOGO cannot process odd quantities!");
-        }
-        freeAmount += Math.floor(item.quantity / 2) * item.price;
-      });
-      return freeAmount;
-    }
-    return 0;
-  }
-
-  calculateTotal() {
-    const subtotal = this.calculateSubtotal();
-    const discount = this.calculateDiscountAmount(subtotal);
-    const discountedSubtotal = Math.max(0, subtotal - discount);
-    const tax = discountedSubtotal * this.taxRate;
-    const finalShipping = discountedSubtotal > 50 ? 0 : this.shippingFee;
-    // BUG 4: Adds shipping twice
-    return Number((discountedSubtotal + tax + finalShipping + this.shippingFee).toFixed(2));
-  }
-}
-
-module.exports = ShoppingCart;
-`,
-      'cart.test.js': `const ShoppingCart = require('./cart');
-
-describe('Public Test Suite', () => {
-  test('addItem accumulates quantities correctly', () => {
-    const cart = new ShoppingCart();
-    cart.addItem('Laptop', 1000, 1);
-    cart.addItem('Laptop', 1000, 2);
-    expect(cart.items[0].quantity).toBe(3);
-  });
-
-  test('calculateSubtotal accounts for quantity', () => {
-    const cart = new ShoppingCart();
-    cart.addItem('Book', 15, 3);
-    cart.addItem('Pen', 2, 5);
-    expect(cart.calculateSubtotal()).toBe(55);
-  });
-
-  test('applyCoupon SAVE10 calculates 10% discount', () => {
-    const cart = new ShoppingCart();
-    cart.addItem('Monitor', 100, 1);
-    cart.applyCoupon('SAVE10');
-    expect(cart.calculateDiscountAmount(cart.calculateSubtotal())).toBe(10);
-  });
-});
-`
-    },
-    hiddenTests: {
-      'hidden_cart.test.js': `const ShoppingCart = require('./cart');
-
-describe('Hidden Edge Case Suite', () => {
-  test('BOGO handles odd quantities without throwing errors', () => {
-    const cart = new ShoppingCart();
-    cart.addItem('Shirt', 20, 3);
-    cart.applyCoupon('BOGO');
-    expect(cart.calculateDiscountAmount(cart.calculateSubtotal())).toBe(20);
-  });
-
-  test('calculateTotal calculates tax and single shipping fee accurately', () => {
-    const cart = new ShoppingCart();
-    cart.addItem('Keyboard', 40, 1);
-    expect(cart.calculateTotal()).toBe(49.19);
-  });
-
-  test('calculateTotal qualifies for free shipping over $50', () => {
-    const cart = new ShoppingCart();
-    cart.addItem('Headphones', 60, 1);
-    expect(cart.calculateTotal()).toBe(64.80);
-  });
-});
-`
-    }
-  },
-
   'auth-service': {
     id: 'auth-service',
     name: 'JWT Auth & Role Authorization',
@@ -650,6 +518,182 @@ int main() {
     q.dequeue(val);
     assert(val == "Task1");
     std::cout << "All Hidden C++ Tests Passed!" << std::endl;
+    return 0;
+}
+`
+    }
+  },
+
+  'python-async-cache': {
+    id: 'python-async-cache',
+    name: 'LRU Cache Engine with TTL & Eviction',
+    language: 'python',
+    difficulty: 'Hard',
+    description: 'Fix cache eviction ordering, TTL expiry validation, and capacity overflow in Python LRU Cache.',
+    files: {
+      'cache.py': `"""
+LRU Cache with Time-To-Live (TTL) Eviction
+"""
+import time
+
+class LRUCache:
+    def __init__(self, capacity=3, default_ttl=60):
+        self.capacity = capacity
+        self.default_ttl = default_ttl
+        self.cache = {}
+        self.access_order = []
+
+    def put(self, key, value, ttl=None):
+        expire_time = time.time() + (ttl if ttl is not None else self.default_ttl)
+        if key in self.cache:
+            self.access_order.remove(key)
+        elif len(self.cache) >= self.capacity:
+            # BUG 1: Evicts newest item instead of oldest LRU item!
+            lru_key = self.access_order.pop(-1)
+            del self.cache[lru_key]
+        
+        self.cache[key] = {'value': value, 'expire_time': expire_time}
+        self.access_order.append(key)
+
+    def get(self, key):
+        if key not in self.cache:
+            return None
+        item = self.cache[key]
+        # BUG 2: Inverted expiration check (returns expired items!)
+        if time.time() < item['expire_time']:
+            del self.cache[key]
+            self.access_order.remove(key)
+            return None
+        
+        self.access_order.remove(key)
+        self.access_order.append(key)
+        return item['value']
+`,
+      'test_cache.py': `import unittest
+import time
+from cache import LRUCache
+
+class TestLRUCache(unittest.TestCase):
+    def test_put_and_get(self):
+        c = LRUCache(capacity=2, default_ttl=10)
+        c.put("a", 100)
+        c.put("b", 200)
+        self.assertEqual(c.get("a"), 100)
+
+    def test_lru_eviction(self):
+        c = LRUCache(capacity=2, default_ttl=10)
+        c.put("x", 1)
+        c.put("y", 2)
+        c.get("x")
+        c.put("z", 3)
+        self.assertIsNone(c.get("y"))
+        self.assertEqual(c.get("x"), 1)
+
+if __name__ == '__main__':
+    unittest.main()
+`
+    },
+    hiddenTests: {
+      'hidden_test_cache.py': `import unittest
+import time
+from cache import LRUCache
+
+class TestHiddenCache(unittest.TestCase):
+    def test_ttl_expiry(self):
+        c = LRUCache(capacity=5, default_ttl=0.1)
+        c.put("temp", "value")
+        time.sleep(0.15)
+        self.assertIsNone(c.get("temp"))
+
+if __name__ == '__main__':
+    unittest.main()
+`
+    }
+  },
+
+  'cpp-graph-routing': {
+    id: 'cpp-graph-routing',
+    name: 'Network Graph & Shortest Path Router',
+    language: 'cpp',
+    difficulty: 'Hard',
+    description: 'Fix adjacency matrix bounds, edge weight accumulation, and Dijkstra priority queue in C++ Graph Router.',
+    files: {
+      'router.cpp': `#include <iostream>
+#include <vector>
+#include <queue>
+#include <climits>
+
+class GraphRouter {
+private:
+    int numNodes;
+    std::vector<std::vector<std::pair<int, int>>> adj;
+
+public:
+    explicit GraphRouter(int nodes) : numNodes(nodes), adj(nodes) {}
+
+    void addEdge(int u, int v, int weight) {
+        if (u < 0 || u >= numNodes || v < 0 || v >= numNodes) return;
+        adj[u].push_back({v, weight});
+    }
+
+    int shortestPath(int start, int target) {
+        if (start < 0 || start >= numNodes || target < 0 || target >= numNodes) return -1;
+        std::vector<int> dist(numNodes, INT_MAX);
+        dist[start] = 0;
+
+        std::priority_queue<std::pair<int, int>, 
+                            std::vector<std::pair<int, int>>, 
+                            std::greater<std::pair<int, int>>> pq;
+        pq.push({0, start});
+
+        while (!pq.empty()) {
+            auto [d, u] = pq.top();
+            pq.pop();
+
+            if (u == target) return d;
+
+            for (auto& edge : adj[u]) {
+                int v = edge.first;
+                int weight = edge.second;
+                if (dist[u] != INT_MAX && dist[u] * weight < dist[v]) {
+                    dist[v] = dist[u] + weight;
+                    pq.push({dist[v], v});
+                }
+            }
+        }
+        return dist[target] == INT_MAX ? -1 : dist[target];
+    }
+};
+`,
+      'test_router.cpp': `#include <iostream>
+#include <cassert>
+#include "router.cpp"
+
+int main() {
+    std::cout << "Running Graph Router Unit Tests..." << std::endl;
+    GraphRouter router(4);
+    router.addEdge(0, 1, 4);
+    router.addEdge(1, 2, 2);
+    router.addEdge(0, 2, 10);
+    assert(router.shortestPath(0, 2) == 6);
+    std::cout << "All Public Graph Router Tests Passed!" << std::endl;
+    return 0;
+}
+`
+    },
+    hiddenTests: {
+      'hidden_test_router.cpp': `#include <iostream>
+#include <cassert>
+#include "router.cpp"
+
+int main() {
+    GraphRouter router(5);
+    router.addEdge(0, 1, 2);
+    router.addEdge(1, 3, 5);
+    router.addEdge(0, 2, 1);
+    router.addEdge(2, 3, 1);
+    assert(router.shortestPath(0, 3) == 2);
+    std::cout << "All Hidden Graph Router Tests Passed!" << std::endl;
     return 0;
 }
 `

@@ -16,6 +16,13 @@ const AVATARS = [
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000' : '';
 
+const getMafiaCount = (p) => {
+  const num = Number(p);
+  if (num <= 5) return 1;
+  if (num <= 8) return 2;
+  return 3;
+};
+
 export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
   const { createRoom, joinRoom, room, myPlayer, toggleReady, startGame, error, setError } = useSocket();
 
@@ -31,12 +38,11 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
   // Room Settings
   const [challengesList, setChallengesList] = useState([]);
   const [selectedLanguage, setSelectedLanguage] = useState('ALL');
-  const [selectedChallenge, setSelectedChallenge] = useState('shopping-cart');
+  const [selectedChallenge, setSelectedChallenge] = useState('auth-service');
   const [codingDuration, setCodingDuration] = useState(240);
   const [discussionDuration, setDiscussionDuration] = useState(90);
   const [votingDuration, setVotingDuration] = useState(60);
   const [maxPlayers, setMaxPlayers] = useState(8);
-  const [mafiaCount, setMafiaCount] = useState(1);
   const [enableQAInspector, setEnableQAInspector] = useState(true);
 
   useEffect(() => {
@@ -107,7 +113,7 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
       discussionDuration: Number(discussionDuration),
       votingDuration: Number(votingDuration),
       maxPlayers: Number(maxPlayers),
-      mafiaCount: Number(mafiaCount),
+      mafiaCount: getMafiaCount(maxPlayers),
       enableQAInspector
     });
 
@@ -138,7 +144,7 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
 
   if (room) {
     const isHost = myPlayer?.isHost;
-    const minPlayersMet = room.players.length >= 3;
+    const fullCapacityMet = room.players.length >= room.settings.maxPlayers;
 
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-100">
@@ -178,11 +184,13 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
                 <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
                   <Users className="w-4 h-4 text-blue-400" /> Connected Developers ({room.players.length}/{room.settings.maxPlayers})
                 </h3>
-                <span className="text-xs text-amber-400 font-mono font-bold">Need 3+ players to launch</span>
+                <span className="text-xs text-amber-400 font-mono font-bold">
+                  {fullCapacityMet ? 'Lobby Full! Ready to Launch' : `Requires ${room.settings.maxPlayers} Players to Launch`}
+                </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto custom-scrollbar pr-1">
-                {room.players.map((p) => {
+                {Array.isArray(room.players) && room.players.map((p) => {
                   const avatarObj = AVATARS.find(a => a.id === p.avatar) || AVATARS[0];
                   return (
                     <div
@@ -240,7 +248,7 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
                   </div>
                   <div className="flex justify-between border-b border-slate-800 pb-1.5">
                     <span>Sprint Timer:</span>
-                    <span className="text-slate-200">{Math.floor(room.settings.codingDuration / 60)}m</span>
+                    <span className="text-slate-200">{room.settings.codingDuration}s</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-800 pb-1.5">
                     <span>Discussion:</span>
@@ -281,14 +289,14 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
             {isHost ? (
               <button
                 onClick={startGame}
-                disabled={!minPlayersMet}
+                disabled={!fullCapacityMet}
                 className={`w-full sm:w-auto px-8 py-3 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2 ${
-                  minPlayersMet
+                  fullCapacityMet
                     ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/40 cursor-pointer'
                     : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-800'
                 }`}
               >
-                <Play className="w-4 h-4 fill-current" /> {minPlayersMet ? 'Launch Code Mafia Match' : 'Need 3+ Players to Start'}
+                <Play className="w-4 h-4 fill-current" /> {fullCapacityMet ? 'Launch Code Mafia Match' : `Need Full Team (${room.players.length}/${room.settings.maxPlayers}) to Start`}
               </button>
             ) : (
               <span className="text-xs font-mono text-slate-500">Waiting for host to start the game...</span>
@@ -496,16 +504,12 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    Mafia Count: <span className="text-red-400 font-bold">{mafiaCount}</span>
+                    Mafia Count
                   </label>
-                  <input
-                    type="range"
-                    min={1}
-                    max={4}
-                    value={mafiaCount}
-                    onChange={(e) => setMafiaCount(e.target.value)}
-                    className="w-full accent-red-500"
-                  />
+                  <div className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs font-mono text-red-400 font-bold flex items-center justify-between">
+                    <span>{getMafiaCount(maxPlayers)} Saboteur(s)</span>
+                    <span className="text-[10px] text-slate-500 font-normal">(Auto-calculated)</span>
+                  </div>
                 </div>
               </div>
 

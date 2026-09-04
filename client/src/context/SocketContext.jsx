@@ -23,6 +23,7 @@ export const SocketProvider = ({ children }) => {
   const [remoteCursors, setRemoteCursors] = useState({});
   const [auditLogs, setAuditLogs] = useState([]);
   const [unlockedHints, setUnlockedHints] = useState([]);
+  const [activeSubcodeChallenge, setActiveSubcodeChallenge] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -72,6 +73,14 @@ export const SocketProvider = ({ children }) => {
 
     s.on('hint_unlocked', (hintPayload) => {
       setUnlockedHints(prev => [...prev, hintPayload]);
+    });
+
+    s.on('subcode_sabotage_start', (subcodePayload) => {
+      setActiveSubcodeChallenge(subcodePayload);
+    });
+
+    s.on('subcode_resolved', () => {
+      setActiveSubcodeChallenge(null);
     });
 
     s.on('chat_received', (msg) => {
@@ -159,12 +168,53 @@ export const SocketProvider = ({ children }) => {
     });
   };
 
+  const quickMatch = (playerName, avatar, options = {}) => {
+    return new Promise((resolve) => {
+      if (!socket || !socket.connected) {
+        const errMsg = 'Backend server is not connected.';
+        setError(errMsg);
+        return resolve({ success: false, error: errMsg });
+      }
+
+      let ackReceived = false;
+      const timeout = setTimeout(() => {
+        if (!ackReceived) {
+          setError('Quick match timed out.');
+          resolve({ success: false, error: 'Quick match timed out' });
+        }
+      }, 5000);
+
+      socket.emit('quick_match', { playerName, avatar, ...options }, (response) => {
+        ackReceived = true;
+        clearTimeout(timeout);
+
+        if (response && response.success) {
+          setRoom(response.room);
+          setCodeFiles(response.room.files);
+          setActiveFile(Object.keys(response.room.files)[0]);
+          setError(null);
+          resolve({ success: true, room: response.room });
+        } else {
+          const err = response ? response.error : 'Failed to find quick match';
+          setError(err);
+          resolve({ success: false, error: err });
+        }
+      });
+    });
+  };
+
   const toggleReady = () => {
     if (room) socket.emit('toggle_ready', { roomCode: room.code });
   };
 
   const startGame = () => {
-    if (room) socket.emit('start_game', { roomCode: room.code });
+    if (room) {
+      if (socket && socket.connected) {
+        socket.emit('start_game', { roomCode: room.code });
+      } else {
+        setRoom(prev => prev ? { ...prev, status: 'CODING_PHASE' } : null);
+      }
+    }
   };
 
   const updateCode = (filename, content) => {
@@ -240,7 +290,32 @@ export const SocketProvider = ({ children }) => {
     }
   };
 
+  const triggerMafiaSabotage = (powerId, targetData = {}) => {
+    return new Promise((resolve) => {
+      if (!room || !socket) return resolve({ success: false, error: 'Not connected' });
+      socket.emit('mafia_trigger_sabotage', { roomCode: room.code, powerId, targetData }, (res) => {
+        resolve(res || { success: false });
+      });
+    });
+  };
+
+  const submitSubcodeFix = (code) => {
+    return new Promise((resolve) => {
+      if (!room || !socket) return resolve({ success: false, error: 'Not connected' });
+      socket.emit('submit_subcode_fix', { roomCode: room.code, code }, (res) => {
+        if (res && res.success) {
+          setActiveSubcodeChallenge(null);
+        }
+        resolve(res || { success: false });
+      });
+    });
+  };
+
   const myPlayer = room && socket ? room.players.find(p => p.socketId === socket.id) : null;
+
+  const clearEliminationResult = () => {
+    setEliminationResult(null);
+  };
 
   return (
     <SocketContext.Provider value={{
@@ -253,13 +328,19 @@ export const SocketProvider = ({ children }) => {
       codeFiles,
       testResults,
       eliminationResult,
+      clearEliminationResult,
       remoteCursors,
       auditLogs,
       unlockedHints,
+      activeSubcodeChallenge,
+      setActiveSubcodeChallenge,
+      triggerMafiaSabotage,
+      submitSubcodeFix,
       error,
       setError,
       createRoom,
       joinRoom,
+      quickMatch,
       toggleReady,
       startGame,
       updateCode,

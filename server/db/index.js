@@ -164,6 +164,17 @@ async function getLeaderboard() {
   }
 }
 
+// Get total registered users count
+async function getUserCount() {
+  if (!isConnected) return inMemoryUsers.size;
+  try {
+    const res = await pool.query('SELECT COUNT(*) FROM users');
+    return parseInt(res.rows[0].count, 10) || 0;
+  } catch (err) {
+    return inMemoryUsers.size;
+  }
+}
+
 module.exports = {
   pool,
   initDB,
@@ -172,5 +183,6 @@ module.exports = {
   findUserById,
   saveMatchHistory,
   saveAuditLog,
-  getLeaderboard
+  getLeaderboard,
+  getUserCount
 };

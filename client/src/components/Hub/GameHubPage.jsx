@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Navbar } from './Navbar';
 import { HeroSection } from './HeroSection';
+import { HowItWorksSection } from './HowItWorksSection';
+import { TopLeaderboardSection } from './TopLeaderboardSection';
 import { CreateGameModal } from './CreateGameModal';
 import { JoinGameModal } from './JoinGameModal';
 import { QuickMatchModal } from './QuickMatchModal';
@@ -21,33 +23,43 @@ export function GameHubPage({ onNavigateHome, onOpenProfile, onProceedToLobby })
           onJoinClick={() => setModal('join')}
           onQuickMatchClick={() => setModal('quick')}
         />
+
+        <HowItWorksSection />
+
+        <TopLeaderboardSection />
       </div>
 
       {/* Modals */}
       {modal === 'create' && (
         <CreateGameModal
           onClose={() => setModal('none')}
-          onProceedToLobby={(config) => {
+          onProceedToLobby={async (config) => {
+            let res = null;
+            if (onProceedToLobby) res = await onProceedToLobby(config);
             setModal('none');
-            if (onProceedToLobby) onProceedToLobby(config);
+            return res;
           }}
         />
       )}
       {modal === 'join' && (
         <JoinGameModal
           onClose={() => setModal('none')}
-          onProceedToLobby={(config) => {
-            setModal('none');
-            if (onProceedToLobby) onProceedToLobby(config);
+          onProceedToLobby={async (config) => {
+            let res = null;
+            if (onProceedToLobby) res = await onProceedToLobby(config);
+            if (!res || res.success !== false) setModal('none');
+            return res;
           }}
         />
       )}
       {modal === 'quick' && (
         <QuickMatchModal
           onClose={() => setModal('none')}
-          onProceedToLobby={(config) => {
+          onProceedToLobby={async (config) => {
+            let res = null;
+            if (onProceedToLobby) res = await onProceedToLobby(config);
             setModal('none');
-            if (onProceedToLobby) onProceedToLobby(config);
+            return res;
           }}
         />
       )}

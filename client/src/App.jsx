@@ -1,165 +1,363 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import { useSocket } from './context/SocketContext';
 import RetroScene from './components/Landing/RetroScene';
 import LoginPage from './components/Auth/LoginPage';
 import SignUpPage from './components/Auth/SignUpPage';
 import GameHubPage from './components/Hub/GameHubPage';
 import ProfilePage from './components/Profile/ProfilePage';
+import RoomLobby from './components/Lobby/RoomLobby';
 import GameHeader from './components/Game/GameHeader';
 import RoleRevealModal from './components/Game/RoleRevealModal';
 import IDEWorkspace from './components/Workspace/IDEWorkspace';
 import DiscussionModal from './components/Game/DiscussionModal';
 import VotingModal from './components/Game/VotingModal';
+import EliminationModal from './components/Game/EliminationModal';
 import GameOverScreen from './components/Game/GameOverScreen';
 
-export default function App() {
-  const { room, createRoom, joinRoom, setRoom, setCodeFiles, setActiveFile } = useSocket();
-  const [currentView, setCurrentView] = useState('landing'); // 'landing' | 'login' | 'signup' | 'hub' | 'profile' | 'editor'
-
-  // Active Game / IDE Editor Workspace view
-  if (room || currentView === 'editor') {
-    if (room?.status === 'GAME_OVER') {
-      return <GameOverScreen />;
+// Helper component for Landing Route (/)
+function LandingRouteWrapper() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const raw = localStorage.getItem('code_mafia_user');
+    const token = localStorage.getItem('code_mafia_token');
+    if (raw || token) {
+      navigate('/hub', { replace: true });
     }
+  }, [navigate]);
 
+  return (
+    <RetroScene
+      onEnter={(mode) => navigate(mode === 'signup' ? '/signup' : '/login')}
+    />
+  );
+}
+
+// Helper component for Auth Routes (/login, /signup)
+function AuthRouteWrapper({ type }) {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const raw = localStorage.getItem('code_mafia_user');
+    const token = localStorage.getItem('code_mafia_token');
+    if (raw || token) {
+      navigate('/hub', { replace: true });
+    }
+  }, [navigate]);
+
+  if (type === 'signup') {
     return (
-      <div className="h-screen w-screen flex flex-col bg-slate-950 overflow-hidden font-sans">
-        {/* Top Navigation & Live Ticker */}
-        <GameHeader />
+      <SignUpPage
+        onNavigateToLogin={() => navigate('/login')}
+        onSignupSuccess={() => navigate('/hub')}
+        onBackToLanding={() => navigate('/')}
+      />
+    );
+  }
 
-        {/* Main IDE Workspace Editor */}
-        <IDEWorkspace />
+  return (
+    <LoginPage
+      onNavigateToSignup={() => navigate('/signup')}
+      onLoginSuccess={() => navigate('/hub')}
+      onBackToLanding={() => navigate('/')}
+    />
+  );
+}
 
-        {/* Phase Overlays */}
-        {room?.status === 'ROLE_REVEAL' && <RoleRevealModal />}
-        {room?.status === 'DISCUSSION_PHASE' && <DiscussionModal />}
-        {room?.status === 'VOTING_PHASE' && <VotingModal />}
+// Helper component for Hub routes (/hub, /how-it-works, /leaderboard)
+function HubRouteWrapper({ section, onProceedToLobby }) {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (section === 'how-it-works') {
+      const el = document.getElementById('how-it-works');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    } else if (section === 'leaderboard') {
+      const el = document.getElementById('leaderboard');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [section]);
+
+  return (
+    <GameHubPage
+      onNavigateHome={() => navigate('/')}
+      onOpenProfile={() => navigate('/profile')}
+      onProceedToLobby={onProceedToLobby}
+    />
+  );
+}
+
+// Helper component for Game Room Route (/room/:code)
+function RoomRouteWrapper() {
+  const { code } = useParams();
+  const navigate = useNavigate();
+  const { room, joinRoom, setRoom, setCodeFiles, setActiveFile } = useSocket();
+
+  useEffect(() => {
+    if (code && (!room || room.code !== code.toUpperCase())) {
+      let savedUser = null;
+      try {
+        const raw = localStorage.getItem('code_mafia_user');
+        if (raw) savedUser = JSON.parse(raw);
+      } catch (e) {}
+
+      const playerName = savedUser?.username || 'Operative';
+      const avatar = savedUser?.avatar || 'avatar_1';
+
+      joinRoom(code.toUpperCase().trim(), playerName, avatar).then(res => {
+        if (!res || !res.success) {
+          window._localRooms = window._localRooms || new Map();
+          let existingRoom = window._localRooms.get(code.toUpperCase().trim());
+          if (!existingRoom) {
+            existingRoom = {
+              code: code.toUpperCase().trim(),
+              status: 'LOBBY',
+              timerSeconds: 300,
+              settings: {
+                challengeId: 'auth-service',
+                challengeName: 'JWT Auth & Role Authorization',
+                language: 'python',
+                difficulty: 'MEDIUM',
+                codingDuration: 300,
+                discussionDuration: 90,
+                votingDuration: 60,
+                maxPlayers: 8,
+                mafiaCount: 2,
+                enableQAInspector: true
+              },
+              players: [
+                { socketId: 'local-user', name: playerName, avatar, isHost: true, isReady: true }
+              ],
+              files: {
+                'cart.py': `# Fix calculation logic for shopping cart\ndef calculate_total(items, tax_rate):\n    total = 0\n    for item in items:\n        total += item['price'] * item['quantity']\n    total += total * tax_rate\n    return round(total, 2)\n`,
+                'cart.test.py': `# Test suite\ndef test_calculate_total():\n    items = [{'price': 10, 'quantity': 2}]\n    assert calculate_total(items, 0.1) == 22.0\n`
+              }
+            };
+            window._localRooms.set(code.toUpperCase().trim(), existingRoom);
+          }
+          if (setRoom) setRoom(existingRoom);
+          if (setCodeFiles) setCodeFiles(existingRoom.files);
+          if (setActiveFile) setActiveFile(Object.keys(existingRoom.files)[0]);
+        }
+      });
+    }
+  }, [code, room, joinRoom, setRoom, setCodeFiles, setActiveFile]);
+
+  if (!room) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-purple-300 font-pixel text-xs">
+        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <span>CONNECTING TO ROOM {code?.toUpperCase()}...</span>
       </div>
     );
   }
 
-  // Pre-game / Auth views
-  if (currentView === 'landing') {
+  if (room.status === 'GAME_OVER') {
+    return <GameOverScreen />;
+  }
+
+  if (room.status === 'LOBBY') {
     return (
-      <RetroScene
-        onEnter={(mode) => {
-          if (mode === 'login') {
-            setCurrentView('login');
-          } else if (mode === 'signup') {
-            setCurrentView('signup');
-          } else {
-            setCurrentView('login');
-          }
+      <RoomLobby
+        onBackToLanding={() => {
+          if (setRoom) setRoom(null);
+          navigate('/hub');
         }}
       />
     );
   }
 
-  if (currentView === 'login') {
-    return (
-      <LoginPage
-        onNavigateToSignup={() => setCurrentView('signup')}
-        onLoginSuccess={() => setCurrentView('hub')}
-        onBackToLanding={() => setCurrentView('landing')}
-      />
-    );
-  }
-
-  if (currentView === 'signup') {
-    return (
-      <SignUpPage
-        onNavigateToLogin={() => setCurrentView('login')}
-        onSignupSuccess={() => setCurrentView('hub')}
-        onBackToLanding={() => setCurrentView('landing')}
-      />
-    );
-  }
-
-  if (currentView === 'profile') {
-    return (
-      <ProfilePage
-        onBackToGame={() => setCurrentView('hub')}
-      />
-    );
-  }
-
-  // Challenge selector helper based on language and difficulty
-  const mapChallengeId = (lang, diff) => {
-    const l = (lang || '').toLowerCase();
-    const d = (diff || '').toUpperCase();
-
-    if (l === 'python') {
-      return d === 'EASY' ? 'python-pipeline' : 'python-evaluator';
-    }
-    if (l === 'c') {
-      return 'c-memory-buffer';
-    }
-    if (l === 'c++' || l === 'cpp') {
-      return 'cpp-circular-queue';
-    }
-    if (d === 'MEDIUM') return 'auth-service';
-    if (d === 'HARD' || d === 'EXPERT') return 'bank-ledger';
-    return 'shopping-cart';
-  };
-
-  // Single Purple Theme Frontend for Investigation Creation & Joining
   return (
-    <GameHubPage
-      onNavigateHome={() => setCurrentView('landing')}
-      onOpenProfile={() => setCurrentView('profile')}
-      onProceedToLobby={async (config) => {
-        let res = null;
-        if (config?.caseCode && !config?.players) {
-          res = await joinRoom(config.caseCode, 'Operative', 'avatar_1');
-        } else {
-          const selectedChallengeId = mapChallengeId(config?.language, config?.difficulty);
-          res = await createRoom('Operative', 'avatar_1', {
-            challengeId: selectedChallengeId,
-            language: config?.language?.toLowerCase() || 'javascript',
-            difficulty: config?.difficulty || 'MEDIUM',
-            maxPlayers: config?.players || 8,
-            mafiaCount: 2,
-            enableQAInspector: true
-          });
-        }
-
-        if (!res || !res.success) {
-          // Fallback room workspace if backend socket fails
-          const fallbackRoom = {
-            code: config?.caseCode || 'MAFIA-101',
-            status: 'CODING_PHASE',
-            settings: {
-              challengeId: 'shopping-cart',
-              challengeName: 'Fix Shopping Cart Calculation & Tax',
-              language: config?.language?.toLowerCase() || 'python',
-              difficulty: config?.difficulty || 'MEDIUM',
-              codingDuration: 900,
-              discussionDuration: 90,
-              votingDuration: 60,
-              maxPlayers: config?.players || 8,
-              mafiaCount: 2,
-              enableQAInspector: true
-            },
-            players: [
-              { socketId: 'local-user', name: 'Operative', avatar: 'avatar_1', isHost: true, isReady: true }
-            ],
-            files: {
-              'cart.py': `# Fix the calculation logic for the shopping cart\ndef calculate_total(items, tax_rate):\n    total = 0\n    for item in items:\n        total += item['price'] * item['quantity']\n    total += total * tax_rate\n    return round(total, 2)\n`,
-              'cart.test.py': `# Test suite\ndef test_calculate_total():\n    items = [{'price': 10, 'quantity': 2}]\n    assert calculate_total(items, 0.1) == 22.0\n`
-            }
-          };
-          if (setRoom) setRoom(fallbackRoom);
-          if (setCodeFiles) setCodeFiles(fallbackRoom.files);
-          if (setActiveFile) setActiveFile(Object.keys(fallbackRoom.files)[0]);
-        }
-
-        setCurrentView('editor');
-      }}
-    />
+    <div className="h-screen w-screen flex flex-col bg-slate-950 overflow-hidden font-sans">
+      <GameHeader />
+      <IDEWorkspace />
+      {room.status === 'ROLE_REVEAL' && <RoleRevealModal />}
+      {room.status === 'DISCUSSION_PHASE' && <DiscussionModal />}
+      {room.status === 'VOTING_PHASE' && <VotingModal />}
+      <EliminationModal />
+    </div>
   );
 }
 
+export default function App() {
+  const navigate = useNavigate();
+  const { room, createRoom, joinRoom, quickMatch, setRoom, setCodeFiles, setActiveFile } = useSocket();
 
+  // Keep URL synced when entering a room
+  useEffect(() => {
+    if (room && room.code && !window.location.pathname.startsWith(`/room/${room.code}`)) {
+      navigate(`/room/${room.code}`);
+    }
+  }, [room, navigate]);
 
+  const mapChallengeId = (lang, diff) => {
+    const l = (lang || '').toLowerCase();
+    const d = (diff || '').toUpperCase();
+    if (l === 'python') return d === 'EASY' ? 'python-pipeline' : 'python-evaluator';
+    if (l === 'c') return 'c-memory-buffer';
+    if (l === 'c++' || l === 'cpp') return 'cpp-circular-queue';
+    if (d === 'MEDIUM') return 'auth-service';
+    if (d === 'HARD' || d === 'EXPERT') return 'bank-ledger';
+    return 'auth-service';
+  };
 
+  const handleProceedToLobby = async (config) => {
+    window._localRooms = window._localRooms || new Map();
+    let savedUser = null;
+    try {
+      const raw = localStorage.getItem('code_mafia_user');
+      if (raw) savedUser = JSON.parse(raw);
+    } catch (e) {}
 
+    const playerName = config?.playerName || savedUser?.username || 'Operative';
+    const avatar = savedUser?.avatar || 'avatar_1';
+    const durationSeconds = Number(config?.durationSeconds) || 300;
+    const maxPlayersCount = Number(config?.players) || 8;
+
+    let res = null;
+    if (config?.quickMatch) {
+      res = await quickMatch(playerName, avatar);
+      if (res && res.success && res.room) {
+        navigate(`/room/${res.room.code}`);
+        return res;
+      }
+    }
+    if (config?.caseCode && !config?.players) {
+      const targetCode = config.caseCode.toUpperCase().trim();
+      res = await joinRoom(targetCode, playerName, avatar);
+
+      if (!res || !res.success) {
+        let existingRoom = window._localRooms.get(targetCode);
+        if (!existingRoom) {
+          existingRoom = {
+            code: targetCode,
+            status: 'LOBBY',
+            timerSeconds: durationSeconds,
+            settings: {
+              challengeId: 'auth-service',
+              challengeName: 'JWT Auth & Role Authorization',
+              language: 'python',
+              difficulty: 'MEDIUM',
+              codingDuration: durationSeconds,
+              discussionDuration: 90,
+              votingDuration: 60,
+              maxPlayers: maxPlayersCount,
+              mafiaCount: (maxPlayersCount <= 5 ? 1 : maxPlayersCount <= 8 ? 2 : 3),
+              enableQAInspector: true
+            },
+            players: [
+              { socketId: 'local-user', name: playerName, avatar, isHost: true, isReady: true }
+            ],
+            files: {
+              'cart.py': `# Fix calculation logic for shopping cart\ndef calculate_total(items, tax_rate):\n    total = 0\n    for item in items:\n        total += item['price'] * item['quantity']\n    total += total * tax_rate\n    return round(total, 2)\n`,
+              'cart.test.py': `# Test suite\ndef test_calculate_total():\n    items = [{'price': 10, 'quantity': 2}]\n    assert calculate_total(items, 0.1) == 22.0\n`
+            }
+          };
+          window._localRooms.set(targetCode, existingRoom);
+        } else {
+          let finalPlayerName = playerName;
+          const existingNames = new Set(existingRoom.players.map(p => p.name));
+          if (existingNames.has(finalPlayerName)) {
+            let counter = 2;
+            while (existingNames.has(`${playerName} (${counter})`)) counter++;
+            finalPlayerName = `${playerName} (${counter})`;
+          }
+          existingRoom.players.push({
+            socketId: `user-${Date.now()}`,
+            name: finalPlayerName,
+            avatar,
+            isHost: false,
+            isReady: true
+          });
+        }
+        if (setRoom) setRoom({ ...existingRoom });
+        if (setCodeFiles) setCodeFiles(existingRoom.files);
+        if (setActiveFile) setActiveFile(Object.keys(existingRoom.files)[0]);
+        navigate(`/room/${targetCode}`);
+        return { success: true, room: existingRoom };
+      } else if (res.room) {
+        navigate(`/room/${res.room.code}`);
+      }
+    } else {
+      const caseCode = config?.caseCode ? config.caseCode.toUpperCase().trim() : ('MAFIA-' + Math.floor(1000 + Math.random() * 9000));
+      const selectedChallengeId = mapChallengeId(config?.language, config?.difficulty);
+      
+      res = await createRoom(playerName, avatar, {
+        caseCode,
+        isPublic: config?.isPublic !== undefined ? config.isPublic : true,
+        challengeId: selectedChallengeId,
+        language: config?.language?.toLowerCase() || 'javascript',
+        difficulty: config?.difficulty || 'MEDIUM',
+        codingDuration: durationSeconds,
+        maxPlayers: maxPlayersCount,
+        mafiaCount: (maxPlayersCount <= 5 ? 1 : maxPlayersCount <= 8 ? 2 : 3),
+        enableQAInspector: true
+      });
+
+      if (!res || !res.success) {
+        const fallbackRoom = {
+          code: caseCode,
+          status: 'LOBBY',
+          timerSeconds: durationSeconds,
+          settings: {
+            challengeId: 'auth-service',
+            challengeName: 'JWT Auth & Role Authorization',
+            language: config?.language?.toLowerCase() || 'python',
+            difficulty: config?.difficulty || 'MEDIUM',
+            codingDuration: durationSeconds,
+            discussionDuration: 90,
+            votingDuration: 60,
+            maxPlayers: maxPlayersCount,
+            mafiaCount: (maxPlayersCount <= 5 ? 1 : maxPlayersCount <= 8 ? 2 : 3),
+            enableQAInspector: true
+          },
+          players: [
+            { socketId: 'local-user', name: playerName, avatar, isHost: true, isReady: true }
+          ],
+          files: {
+            'cart.py': `# Fix calculation logic for shopping cart\ndef calculate_total(items, tax_rate):\n    total = 0\n    for item in items:\n        total += item['price'] * item['quantity']\n    total += total * tax_rate\n    return round(total, 2)\n`,
+            'cart.test.py': `# Test suite\ndef test_calculate_total():\n    items = [{'price': 10, 'quantity': 2}]\n    assert calculate_total(items, 0.1) == 22.0\n`
+          }
+        };
+
+        window._localRooms.set(caseCode, fallbackRoom);
+        if (setRoom) setRoom(fallbackRoom);
+        if (setCodeFiles) setCodeFiles(fallbackRoom.files);
+        if (setActiveFile) setActiveFile(Object.keys(fallbackRoom.files)[0]);
+        navigate(`/room/${caseCode}`);
+        return { success: true, room: fallbackRoom };
+      } else if (res.room) {
+        navigate(`/room/${res.room.code}`);
+      }
+    }
+
+    return res;
+  };
+
+  return (
+    <Routes>
+      <Route path="/" element={<LandingRouteWrapper />} />
+      <Route path="/login" element={<AuthRouteWrapper type="login" />} />
+      <Route path="/signup" element={<AuthRouteWrapper type="signup" />} />
+      <Route
+        path="/hub"
+        element={<HubRouteWrapper onProceedToLobby={handleProceedToLobby} />}
+      />
+      <Route
+        path="/how-it-works"
+        element={<HubRouteWrapper section="how-it-works" onProceedToLobby={handleProceedToLobby} />}
+      />
+      <Route
+        path="/leaderboard"
+        element={<HubRouteWrapper section="leaderboard" onProceedToLobby={handleProceedToLobby} />}
+      />
+      <Route
+        path="/profile"
+        element={<ProfilePage onBackToGame={() => navigate('/hub')} />}
+      />
+      <Route path="/room/:code" element={<RoomRouteWrapper />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}

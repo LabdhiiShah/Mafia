@@ -10,8 +10,8 @@ class RoomManager {
   }
 
   createRoom(hostPlayer, options = {}) {
-    const roomCode = 'MAFIA-' + Math.floor(1000 + Math.random() * 9000);
-    const challengeKey = options.challengeId && challenges[options.challengeId] ? options.challengeId : 'shopping-cart';
+    const roomCode = options.caseCode ? options.caseCode.toUpperCase().trim() : ('MAFIA-' + Math.floor(1000 + Math.random() * 9000));
+    const challengeKey = options.challengeId && challenges[options.challengeId] ? options.challengeId : 'auth-service';
     const challenge = challenges[challengeKey];
 
     const room = {
@@ -19,6 +19,7 @@ class RoomManager {
       hostId: hostPlayer.id,
       status: 'LOBBY',
       settings: {
+        isPublic: options.isPublic !== undefined ? Boolean(options.isPublic) : true,
         challengeId: challengeKey,
         challengeName: challenge.name,
         language: challenge.language || 'javascript',
@@ -30,6 +31,7 @@ class RoomManager {
         mafiaCount: options.mafiaCount || 1,
         enableQAInspector: options.enableQAInspector || false
       },
+      usedChallengeIds: [challengeKey],
       challengeObj: challenge,
       players: new Map(),
       files: JSON.parse(JSON.stringify(challenge.files)),
@@ -41,7 +43,12 @@ class RoomManager {
       votes: new Map(),
       eliminatedPlayers: [],
       winner: null,
-      winningReason: ''
+      winningReason: '',
+      sabotageState: {
+        usedPowers: [],
+        fakeRedLines: [],
+        activeSubcodes: {}
+      }
     };
 
     this.addPlayerToRoom(room, hostPlayer, true);
@@ -51,8 +58,106 @@ class RoomManager {
     return room;
   }
 
+  advanceRoomRound(roomCode) {
+    const room = this.getRoom(roomCode);
+    if (!room) return null;
+
+    room.round++;
+    if (!room.usedChallengeIds) {
+      room.usedChallengeIds = [room.settings.challengeId];
+    }
+
+    const DIFFICULTY_TIERS = ['Easy', 'Medium', 'Hard', 'Expert'];
+    const currentLang = (room.settings.language || 'javascript').toLowerCase();
+    const initialDiff = room.settings.difficulty || 'Easy';
+
+    let baseIndex = DIFFICULTY_TIERS.findIndex(d => d.toLowerCase() === initialDiff.toLowerCase());
+    if (baseIndex === -1) baseIndex = 0;
+
+    let targetTierIndex = Math.min(baseIndex + (room.round - 1), DIFFICULTY_TIERS.length - 1);
+    let targetDifficulty = DIFFICULTY_TIERS[targetTierIndex];
+
+    const allChallenges = Object.values(challenges);
+
+    // 1. Find unused challenge matching exact language and target difficulty tier
+    let nextChallenge = allChallenges.find(c => 
+      c.language.toLowerCase() === currentLang && 
+      c.difficulty.toLowerCase() === targetDifficulty.toLowerCase() && 
+      !room.usedChallengeIds.includes(c.id)
+    );
+
+    // 2. Fallback: find unused challenge in same language of higher difficulty
+    if (!nextChallenge) {
+      nextChallenge = allChallenges.find(c => 
+        c.language.toLowerCase() === currentLang && 
+        !room.usedChallengeIds.includes(c.id)
+      );
+    }
+
+    // 3. Fallback: find unused challenge matching target difficulty in any language
+    if (!nextChallenge) {
+      nextChallenge = allChallenges.find(c => 
+        c.difficulty.toLowerCase() === targetDifficulty.toLowerCase() && 
+        !room.usedChallengeIds.includes(c.id)
+      );
+    }
+
+    // 4. Fallback: find any unused challenge
+    if (!nextChallenge) {
+      nextChallenge = allChallenges.find(c => !room.usedChallengeIds.includes(c.id));
+    }
+
+    // 5. Ultimate fallback: keep current challenge or first available
+    if (!nextChallenge) {
+      nextChallenge = room.challengeObj || allChallenges[0];
+    }
+
+    room.usedChallengeIds.push(nextChallenge.id);
+    room.challengeObj = nextChallenge;
+    room.settings.challengeId = nextChallenge.id;
+    room.settings.challengeName = nextChallenge.name;
+    room.settings.difficulty = nextChallenge.difficulty;
+    room.files = JSON.parse(JSON.stringify(nextChallenge.files));
+    room.activeFile = Object.keys(nextChallenge.files)[0];
+    room.testResults = { passed: 0, failed: 0, total: 0, passRate: 0, results: [] };
+    room.votes.clear();
+
+    auditLogger.logEvent(roomCode, {
+      type: 'ROUND_ADVANCED',
+      authorName: 'System',
+      authorId: 'system',
+      detail: `Advanced to Round ${room.round}. New Challenge: ${nextChallenge.name} (Difficulty: ${nextChallenge.difficulty})`
+    });
+
+    return room;
+  }
+
   getRoom(roomCode) {
     return this.rooms.get(roomCode);
+  }
+
+  findPublicRoom(language, difficulty) {
+    for (const room of this.rooms.values()) {
+      if (
+        room.status === 'LOBBY' &&
+        room.settings.isPublic !== false &&
+        room.players.size < room.settings.maxPlayers
+      ) {
+        if (!language || room.settings.language.toLowerCase() === language.toLowerCase()) {
+          return room;
+        }
+      }
+    }
+    for (const room of this.rooms.values()) {
+      if (
+        room.status === 'LOBBY' &&
+        room.settings.isPublic !== false &&
+        room.players.size < room.settings.maxPlayers
+      ) {
+        return room;
+      }
+    }
+    return null;
   }
 
   addPlayerToRoom(room, player, isHost = false) {
@@ -60,12 +165,23 @@ class RoomManager {
       throw new Error(`Room is full (Max ${room.settings.maxPlayers} players)`);
     }
 
+    // Disambiguate duplicate player names if multiple players join with the same handle
+    let finalName = player.name || 'Developer';
+    const existingNames = new Set(Array.from(room.players.values()).map(p => p.name));
+    if (existingNames.has(finalName)) {
+      let counter = 2;
+      while (existingNames.has(`${player.name} (${counter})`)) {
+        counter++;
+      }
+      finalName = `${player.name} (${counter})`;
+    }
+
     const avatarSeed = player.avatar || `avatar_${(room.players.size % 8) + 1}`;
     
     const playerObj = {
       id: player.id,
       socketId: player.socketId,
-      name: player.name,
+      name: finalName,
       avatar: avatarSeed,
       isHost,
       isReady: isHost,
@@ -111,7 +227,8 @@ class RoomManager {
   assignRoles(room) {
     const playerList = Array.from(room.players.values());
     const total = playerList.length;
-    let mafiaCount = Math.min(room.settings.mafiaCount, Math.floor(total / 2));
+    let mafiaCount = total <= 5 ? 1 : total <= 8 ? 2 : 3;
+    mafiaCount = Math.min(mafiaCount, Math.floor(total / 2));
     if (mafiaCount < 1) mafiaCount = 1;
 
     const shuffled = [...playerList];
@@ -129,15 +246,15 @@ class RoomManager {
     }
 
     let devStartIndex = mafiaCount;
-    if (room.settings.enableQAInspector && total >= 4) {
-      shuffled[devStartIndex].role = 'QA_INSPECTOR';
-      shuffled[devStartIndex].secretObjective = 'MISSION OBJECTIVE: Investigate code diffs closely to identify saboteurs and guide the team during voting.';
+    if (total >= 4) {
+      shuffled[devStartIndex].role = 'DETECTIVE';
+      shuffled[devStartIndex].secretObjective = 'INVESTIGATION MISSION: Inspect code diffs closely, track file changes, identify Mafia saboteurs, and lead the team during discussion & voting.';
       devStartIndex++;
     }
 
     for (let i = devStartIndex; i < shuffled.length; i++) {
-      shuffled[i].role = 'DEVELOPER';
-      shuffled[i].secretObjective = 'MISSION OBJECTIVE: Fix bugs in the project files to pass 100% of public and hidden test suites!';
+      shuffled[i].role = 'CIVILIAN';
+      shuffled[i].secretObjective = 'CIVILIAN MISSION: Work with your team to fix code bugs, pass 100% of test suites, and uncover the Mafia!';
     }
 
     shuffled.forEach(p => {
@@ -199,7 +316,8 @@ class RoomManager {
       eliminatedPlayers: room.eliminatedPlayers,
       winner: room.winner,
       winningReason: room.winningReason,
-      gamification: gamificationState
+      gamification: gamificationState,
+      sabotageState: room.sabotageState || { usedPowers: [], fakeRedLines: [], activeSubcodes: {} }
     };
   }
 }

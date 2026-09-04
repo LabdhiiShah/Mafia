@@ -1,6 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export function ProfileHeader({ onEditProfile, onSettings }) {
+  const [user] = useState(() => {
+    try {
+      const raw = localStorage.getItem('code_mafia_user');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return { username: 'NeoDebugger' };
+  });
+
+  const handleLogout = () => {
+    localStorage.removeItem('code_mafia_token');
+    localStorage.removeItem('code_mafia_user');
+    window.location.href = '/login';
+  };
+
   return (
     <div className="flex flex-col md:flex-row gap-6 md:items-end border-4 border-purple-500/40 bg-[#1a0b2e]/90 p-6 shadow-[4px_4px_0_#5a1a9e]">
       <div className="flex items-center gap-6 flex-1">
@@ -15,7 +29,7 @@ export function ProfileHeader({ onEditProfile, onSettings }) {
         
         <div className="flex flex-col gap-2">
           <div>
-            <h1 className="font-pixel text-xl sm:text-2xl text-white">NeoDebugger</h1>
+            <h1 className="font-pixel text-xl sm:text-2xl text-white">{user.username || 'NeoDebugger'}</h1>
             <p className="font-pixel text-[10px] text-purple-300/70 mt-1">ID: #DEV-8832</p>
           </div>
           
@@ -43,10 +57,10 @@ export function ProfileHeader({ onEditProfile, onSettings }) {
           Edit Profile
         </button>
         <button 
-          onClick={onSettings}
-          className="flex-1 rounded-sm border-2 border-purple-500/50 bg-black/40 px-4 py-2 font-pixel text-[10px] text-purple-200 hover:bg-purple-900/40 focus:outline-none cursor-pointer"
+          onClick={handleLogout}
+          className="flex-1 rounded-sm border-2 border-red-500/50 bg-red-950/40 px-4 py-2 font-pixel text-[10px] text-red-300 hover:bg-red-900/60 hover:text-white focus:outline-none cursor-pointer"
         >
-          Settings
+          Logout
         </button>
       </div>
     </div>
