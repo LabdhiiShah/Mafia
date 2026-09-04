@@ -48,6 +48,14 @@ class RoomManager {
         usedPowers: [],
         fakeRedLines: [],
         activeSubcodes: {}
+      },
+      detectiveState: {
+        usedDirectKill: false,
+        usedProtect: false,
+        protectedSocketId: null,
+        sacrificialSavePending: false,
+        sacrificialSaveAccepted: false,
+        sacrificialSaveVotes: {}
       }
     };
 
@@ -121,12 +129,68 @@ class RoomManager {
     room.activeFile = Object.keys(nextChallenge.files)[0];
     room.testResults = { passed: 0, failed: 0, total: 0, passRate: 0, results: [] };
     room.votes.clear();
+    if (room.sabotageState) {
+      room.sabotageState.fakeRedLines = [];
+    }
+    if (room.detectiveState) {
+      room.detectiveState.protectedSocketId = null;
+      room.detectiveState.sacrificialSaveAccepted = false;
+      room.detectiveState.sacrificialSavePending = false;
+    }
 
     auditLogger.logEvent(roomCode, {
       type: 'ROUND_ADVANCED',
       authorName: 'System',
       authorId: 'system',
       detail: `Advanced to Round ${room.round}. New Challenge: ${nextChallenge.name} (Difficulty: ${nextChallenge.difficulty})`
+    });
+
+    return room;
+  }
+
+  resetRoomToLobby(roomCode) {
+    const room = this.getRoom(roomCode);
+    if (!room) return null;
+
+    room.status = 'LOBBY';
+    room.round = 1;
+    room.winner = null;
+    room.winningReason = '';
+    room.eliminatedPlayers = [];
+    room.votes.clear();
+    room.timerSeconds = room.settings.codingDuration || 300;
+
+    const challengeKey = room.settings.challengeId || 'auth-service';
+    const challenge = challenges[challengeKey] || challenges['auth-service'];
+    if (challenge) {
+      room.files = JSON.parse(JSON.stringify(challenge.files));
+      room.activeFile = Object.keys(challenge.files)[0];
+    }
+    room.testResults = { passed: 0, failed: 0, total: 0, passRate: 0, results: [] };
+
+    for (const player of room.players.values()) {
+      player.isAlive = true;
+      player.isReady = player.isHost;
+      player.role = null;
+      player.secretObjective = '';
+      player.teammates = [];
+    }
+
+    room.sabotageState = { usedPowers: [], fakeRedLines: [], activeSubcodes: {} };
+    room.detectiveState = {
+      usedDirectKill: false,
+      usedProtect: false,
+      protectedSocketId: null,
+      sacrificialSavePending: false,
+      sacrificialSaveAccepted: false,
+      sacrificialSaveVotes: {}
+    };
+
+    auditLogger.logEvent(roomCode, {
+      type: 'PLAY_AGAIN',
+      authorName: 'System',
+      authorId: 'system',
+      detail: `Play Again triggered! Room reset to Lobby for match retry.`
     });
 
     return room;
@@ -246,7 +310,7 @@ class RoomManager {
     }
 
     let devStartIndex = mafiaCount;
-    if (total >= 4) {
+    if (total >= 2 && devStartIndex < shuffled.length) {
       shuffled[devStartIndex].role = 'DETECTIVE';
       shuffled[devStartIndex].secretObjective = 'INVESTIGATION MISSION: Inspect code diffs closely, track file changes, identify Mafia saboteurs, and lead the team during discussion & voting.';
       devStartIndex++;
@@ -265,17 +329,26 @@ class RoomManager {
   serializeRoom(room, forSocketId = null) {
     const gamificationState = gamification.getRoomGamificationState(room.code);
 
+    let requestingPlayer = forSocketId ? room.players.get(forSocketId) : null;
+    if (!requestingPlayer && forSocketId) {
+      for (const p of room.players.values()) {
+        if (p.socketId === forSocketId || p.id === forSocketId || p.name === forSocketId) {
+          requestingPlayer = p;
+          break;
+        }
+      }
+    }
+
     const playerList = Array.from(room.players.values()).map(p => {
-      const isTarget = p.socketId === forSocketId;
-      const requestingPlayer = forSocketId ? room.players.get(forSocketId) : null;
+      const isTarget = (requestingPlayer && (p.socketId === requestingPlayer.socketId || p.id === requestingPlayer.id || p.name === requestingPlayer.name)) || p.socketId === forSocketId || p.id === forSocketId;
       
       let visibleRole = 'HIDDEN';
       let secretObjective = '';
       let teammates = [];
 
       if (room.status === 'GAME_OVER' || isTarget) {
-        visibleRole = p.role;
-        secretObjective = p.secretObjective;
+        visibleRole = p.role || 'CIVILIAN';
+        secretObjective = p.secretObjective || '';
         teammates = p.teammates || [];
       } else if (requestingPlayer && requestingPlayer.role === 'MAFIA' && p.role === 'MAFIA') {
         visibleRole = 'MAFIA';
@@ -317,7 +390,8 @@ class RoomManager {
       winner: room.winner,
       winningReason: room.winningReason,
       gamification: gamificationState,
-      sabotageState: room.sabotageState || { usedPowers: [], fakeRedLines: [], activeSubcodes: {} }
+      sabotageState: room.sabotageState || { usedPowers: [], fakeRedLines: [], activeSubcodes: {} },
+      detectiveState: room.detectiveState || { usedDirectKill: false, usedProtect: false, protectedSocketId: null, sacrificialSavePending: false, sacrificialSaveAccepted: false }
     };
   }
 }

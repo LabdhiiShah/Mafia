@@ -143,8 +143,14 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
   };
 
   if (room) {
-    const isHost = myPlayer?.isHost;
-    const fullCapacityMet = room.players.length >= room.settings.maxPlayers;
+    const playersList = Array.isArray(room.players) ? room.players : [];
+    const settings = room.settings || {};
+    const maxPlayersCount = settings.maxPlayers || 8;
+    const isHost = Boolean(myPlayer?.isHost || room?.hostId === myPlayer?.id || room?.hostId === myPlayer?.socketId);
+    const hasFullTeam = playersList.length >= maxPlayersCount;
+    const readyPlayersCount = playersList.filter(p => p.isReady).length;
+    const allOthersReady = playersList.filter(p => !p.isHost).every(p => p.isReady);
+    const canLaunch = hasFullTeam && allOthersReady;
 
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-100">
@@ -157,7 +163,7 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
                   <Skull className="w-3.5 h-3.5" /> Lobby Active
                 </span>
                 <span className="text-xs text-slate-400 font-mono">
-                  Challenge: <strong className="text-slate-200">{room.settings.challengeName}</strong> ({room.settings.language?.toUpperCase()})
+                  Challenge: <strong className="text-slate-200">{settings.challengeName || 'JWT Auth & Authorization'}</strong> ({settings.language?.toUpperCase() || 'PYTHON'})
                 </span>
               </div>
               <h1 className="text-3xl font-extrabold mt-1 tracking-tight text-white flex items-center gap-2">
@@ -182,15 +188,15 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
             <div className="md:col-span-2 bg-slate-950/60 border border-slate-800/80 rounded-xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                  <Users className="w-4 h-4 text-blue-400" /> Connected Developers ({room.players.length}/{room.settings.maxPlayers})
+                  <Users className="w-4 h-4 text-blue-400" /> Connected Developers ({playersList.length}/{maxPlayersCount})
                 </h3>
                 <span className="text-xs text-amber-400 font-mono font-bold">
-                  {fullCapacityMet ? 'Lobby Full! Ready to Launch' : `Requires ${room.settings.maxPlayers} Players to Launch`}
+                  {canLaunch ? 'Full Team Ready! Host Can Launch' : !hasFullTeam ? `Requires ${maxPlayersCount} Players to Launch (${playersList.length}/${maxPlayersCount})` : `Waiting for Ready (${readyPlayersCount}/${maxPlayersCount})`}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto custom-scrollbar pr-1">
-                {Array.isArray(room.players) && room.players.map((p) => {
+                {playersList.map((p) => {
                   const avatarObj = AVATARS.find(a => a.id === p.avatar) || AVATARS[0];
                   return (
                     <div
@@ -203,21 +209,26 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">{avatarObj.icon}</span>
-                        <div>
-                          <div className="font-semibold text-sm flex items-center gap-1.5">
-                            {p.name}
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-sm flex items-center gap-1.5 flex-wrap">
+                            <span className="truncate max-w-[110px] font-bold text-white" title={p.name}>{p.name}</span>
                             {p.isHost && (
-                              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono border border-amber-500/30">
+                              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono border border-amber-500/30 shrink-0 inline-flex items-center">
                                 HOST
                               </span>
                             )}
+                            <span className="text-[10px] bg-purple-950/60 text-purple-300 px-1.5 py-0.5 rounded font-mono border border-purple-800 shrink-0 inline-flex items-center">
+                              ⭐ {p.xp || 0} XP
+                            </span>
                           </div>
-                          <span className="text-[11px] text-slate-500 font-mono">{p.socketId === myPlayer?.socketId ? '(You)' : 'Developer'}</span>
+                          <span className="text-[11px] text-slate-400 font-mono block mt-0.5">
+                            {p.socketId === myPlayer?.socketId ? '(You)' : 'Developer'}
+                          </span>
                         </div>
                       </div>
 
                       <span
-                        className={`text-xs font-semibold px-2.5 py-1 rounded-md border ${
+                        className={`text-xs font-semibold px-2.5 py-1 rounded-md border shrink-0 ${
                           p.isReady
                             ? 'bg-green-500/10 text-green-400 border-green-500/20'
                             : 'bg-slate-800 text-slate-400 border-slate-700'
@@ -240,27 +251,27 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
                 <div className="space-y-2 text-xs font-mono text-slate-400">
                   <div className="flex justify-between border-b border-slate-800 pb-1.5">
                     <span>Language:</span>
-                    <span className="text-blue-400 font-bold uppercase">{room.settings.language}</span>
+                    <span className="text-blue-400 font-bold uppercase">{settings.language || 'PYTHON'}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-800 pb-1.5">
                     <span>Difficulty:</span>
-                    <span className="text-amber-400 font-bold">{room.settings.difficulty}</span>
+                    <span className="text-amber-400 font-bold">{settings.difficulty || 'MEDIUM'}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-800 pb-1.5">
                     <span>Sprint Timer:</span>
-                    <span className="text-slate-200">{room.settings.codingDuration}s</span>
+                    <span className="text-slate-200">{settings.codingDuration || 300}s</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-800 pb-1.5">
                     <span>Discussion:</span>
-                    <span className="text-slate-200">{room.settings.discussionDuration}s</span>
+                    <span className="text-slate-200">{settings.discussionDuration || 90}s</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-800 pb-1.5">
                     <span>Voting Timer:</span>
-                    <span className="text-slate-200">{room.settings.votingDuration}s</span>
+                    <span className="text-slate-200">{settings.votingDuration || 60}s</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-800 pb-1.5">
                     <span>Mafia Count:</span>
-                    <span className="text-red-400 font-bold">{room.settings.mafiaCount} Saboteur</span>
+                    <span className="text-red-400 font-bold">{settings.mafiaCount || 1} Saboteur</span>
                   </div>
                 </div>
               </div>
@@ -289,14 +300,20 @@ export default function RoomLobby({ initialAuthMode, onBackToLanding }) {
             {isHost ? (
               <button
                 onClick={startGame}
-                disabled={!fullCapacityMet}
+                disabled={!canLaunch}
                 className={`w-full sm:w-auto px-8 py-3 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2 ${
-                  fullCapacityMet
+                  canLaunch
                     ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/40 cursor-pointer'
                     : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-800'
                 }`}
               >
-                <Play className="w-4 h-4 fill-current" /> {fullCapacityMet ? 'Launch Code Mafia Match' : `Need Full Team (${room.players.length}/${room.settings.maxPlayers}) to Start`}
+                <Play className="w-4 h-4 fill-current" /> {
+                  canLaunch
+                    ? 'Launch Code Mafia Match'
+                    : !hasFullTeam
+                    ? `Need full team to start (${playersList.length}/${maxPlayersCount})`
+                    : `Waiting for all players to be READY (${readyPlayersCount}/${maxPlayersCount})`
+                }
               </button>
             ) : (
               <span className="text-xs font-mono text-slate-500">Waiting for host to start the game...</span>

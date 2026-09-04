@@ -18,7 +18,7 @@ export default function DiscussionModal() {
     }
   };
 
-  const alivePlayers = room.players.filter(p => p.isAlive);
+  const alivePlayers = (room?.players || []).filter(p => p && p.isAlive);
 
   return (
     <div className="fixed inset-0 z-40 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">

@@ -2,6 +2,7 @@ const roomManager = require('./roomManager');
 const auditLogger = require('./auditLogger');
 const codeExecutor = require('./codeExecutor');
 const db = require('../db');
+const { gamification } = require('./gamificationEngine');
 
 class GameStateEngine {
   constructor() {
@@ -136,14 +137,25 @@ class GameStateEngine {
       }
     }
 
-    let eliminationResult = { eliminatedPlayer: null, isTie: false, skipped: false };
+    let eliminationResult = { eliminatedPlayer: null, isTie: false, skipped: false, protected: false };
 
-    if (skipCount >= highestVotes || isTie || !eliminatedSocket) {
+    if (room.detectiveState?.sacrificialSaveAccepted) {
       eliminationResult.skipped = true;
       auditLogger.logEvent(roomCode, {
         type: 'VOTE_RESULT',
-        authorName: 'System',
-        authorId: 'system',
+        detail: `🕯️ VOTES SACRIFICED: Innocents sacrificed their voting rights to resurrect the Detective. No elimination this round.`
+      });
+    } else if (eliminatedSocket && room.detectiveState?.protectedSocketId === eliminatedSocket) {
+      eliminationResult.protected = true;
+      eliminationResult.skipped = true;
+      auditLogger.logEvent(roomCode, {
+        type: 'VOTE_RESULT',
+        detail: `🛡️ PROTECTIVE SHIELD ACTIVATED: Target player was shielded by the Detective and SURVIVED the vote!`
+      });
+    } else if (skipCount >= highestVotes || isTie || !eliminatedSocket) {
+      eliminationResult.skipped = true;
+      auditLogger.logEvent(roomCode, {
+        type: 'VOTE_RESULT',
         detail: `No player was eliminated (Tie or majority skipped).`
       });
     } else {
@@ -162,9 +174,7 @@ class GameStateEngine {
         };
         auditLogger.logEvent(roomCode, {
           type: 'VOTE_RESULT',
-          authorName: 'System',
-          authorId: 'system',
-          detail: `Player ${player.name} was eliminated! They were a ${player.role}.`
+          detail: `Player eliminated! Role revealed: ${player.role}.`
         });
       }
     }
@@ -193,11 +203,14 @@ class GameStateEngine {
     const aliveMafia = alivePlayers.filter(p => p.role === 'MAFIA');
     const aliveCivilians = alivePlayers.filter(p => p.role === 'CIVILIAN' || p.role === 'DETECTIVE' || p.role === 'DEVELOPER' || p.role === 'QA_INSPECTOR');
 
-    // Condition 1: Civilians win if 100% of test suites pass!
-    if (room.testResults && room.testResults.total > 0 && room.testResults.passed === room.testResults.total) {
+    const mode = room.settings?.victoryMode || room.settings?.victory || 'STANDARD';
+    const targetPassRate = mode === 'SURVIVAL' ? 80 : 100;
+
+    // Condition 1: Civilians win if required test pass rate is met!
+    if (room.testResults && room.testResults.total > 0 && room.testResults.passRate >= targetPassRate) {
       room.status = 'GAME_OVER';
       room.winner = 'CIVILIANS';
-      room.winningReason = '100% of test suites passed! Codebase fully stabilized.';
+      room.winningReason = `${room.testResults.passRate}% of test suites passed (${mode} target met)! Codebase fully stabilized.`;
       this.endGame(roomCode);
       return true;
     }
@@ -239,6 +252,8 @@ class GameStateEngine {
     }
     const room = roomManager.getRoom(roomCode);
     if (room) {
+      gamification.awardMatchEndXP(roomCode, room.winner, room.players);
+
       auditLogger.logEvent(roomCode, {
         type: 'GAME_OVER',
         authorName: 'System',

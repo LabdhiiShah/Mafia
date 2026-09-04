@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../../context/SocketContext';
 import confetti from 'canvas-confetti';
-import { Trophy, Skull, Shield, CheckCircle2, RotateCcw, Award } from 'lucide-react';
+import { Trophy, Skull, Shield, CheckCircle2, RotateCcw, Award, Home } from 'lucide-react';
 
 export default function GameOverScreen() {
-  const { room, myPlayer } = useSocket();
+  const { room, setRoom, playAgain } = useSocket();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (room?.winner === 'CIVILIANS' || room?.winner === 'DEVELOPERS') {
@@ -19,6 +21,17 @@ export default function GameOverScreen() {
   if (!room) return null;
 
   const isCivWin = room.winner === 'CIVILIANS' || room.winner === 'DEVELOPERS';
+
+  const handleReturnToHub = () => {
+    if (setRoom) setRoom(null);
+    navigate('/hub', { replace: true });
+  };
+
+  const handlePlayAgain = async () => {
+    if (playAgain) {
+      await playAgain();
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-slate-100 relative">
@@ -78,7 +91,12 @@ export default function GameOverScreen() {
                     <span className="text-2xl">{isMafia ? '💀' : isDetective ? '👁️' : '🛡️'}</span>
                     <div>
                       <span className="font-bold text-sm block text-white">{p.name}</span>
-                      <span className="text-xs font-mono font-semibold">{isMafia ? 'MAFIA' : isDetective ? 'DETECTIVE' : 'CIVILIAN'}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-semibold">{isMafia ? 'MAFIA' : isDetective ? 'DETECTIVE' : 'CIVILIAN'}</span>
+                        <span className="text-[10px] font-mono text-amber-300 font-bold px-1.5 py-0.5 bg-amber-950/60 rounded border border-amber-800">
+                          ⭐ {p.xp || 0} XP
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -98,12 +116,19 @@ export default function GameOverScreen() {
         </div>
 
         {/* Post-Match Actions */}
-        <div className="pt-6 border-t border-slate-800 flex justify-center">
+        <div className="pt-6 border-t border-slate-800 flex justify-center gap-4">
           <button
-            onClick={() => window.location.reload()}
-            className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-sm transition flex items-center gap-2 shadow-lg shadow-blue-900/30"
+            onClick={handleReturnToHub}
+            className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs font-mono transition flex items-center gap-2 border border-slate-700 cursor-pointer"
           >
-            <RotateCcw className="w-4 h-4" /> Play Another Match
+            <Home className="w-4 h-4 text-purple-400" /> RETURN TO GAME HUB
+          </button>
+
+          <button
+            onClick={handlePlayAgain}
+            className="px-8 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs font-pixel tracking-wider transition flex items-center gap-2 shadow-lg shadow-purple-900/40 cursor-pointer"
+          >
+            <RotateCcw className="w-4 h-4" /> PLAY AGAIN
           </button>
         </div>
       </div>

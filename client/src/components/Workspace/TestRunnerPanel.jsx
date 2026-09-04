@@ -6,11 +6,16 @@ export default function TestRunnerPanel() {
   const { runTests, testResults, room } = useSocket();
   const [isRunning, setIsRunning] = useState(false);
   const [isRiskyRun, setIsRiskyRun] = useState(false);
+  const [xpBanner, setXpBanner] = useState(null);
 
   const handleRunTests = async () => {
     setIsRunning(true);
-    await runTests(isRiskyRun);
+    const res = await runTests(isRiskyRun);
     setIsRunning(false);
+    if (res && res.xpEarned > 0) {
+      setXpBanner({ xp: res.xpEarned, streak: res.streak || 1, multiplier: res.multiplier || 1.0 });
+      setTimeout(() => setXpBanner(null), 4500);
+    }
   };
 
   const total = testResults?.total || 0;
@@ -64,6 +69,22 @@ export default function TestRunnerPanel() {
           {isRunning ? 'Executing Tests...' : isRiskyRun ? 'Run Risky Test Suite (2x XP)' : 'Run Test Suite'}
         </button>
       </div>
+
+      {/* Animated XP Reward Banner */}
+      {xpBanner && (
+        <div className="px-4 py-2 bg-gradient-to-r from-emerald-950/90 via-purple-950/90 to-emerald-950/90 border-b border-emerald-500/50 flex items-center justify-between text-xs font-mono text-emerald-300 shadow-md">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-amber-400 fill-current animate-pulse" />
+            <span className="font-bold text-white">+{xpBanner.xp} XP EARNED!</span>
+            <span className="text-[11px] text-emerald-300/80">(Streak Multiplier: {xpBanner.multiplier}x)</span>
+          </div>
+          {xpBanner.streak > 1 && (
+            <span className="flex items-center gap-1 font-bold text-amber-300 text-[11px]">
+              <Flame className="w-3.5 h-3.5 fill-current text-rose-400" /> {xpBanner.streak}x COMBO STREAK!
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Progress Bar */}
       {testResults && (

@@ -15,7 +15,7 @@ export default function VotingModal() {
     setHasVoted(true);
   };
 
-  const alivePlayers = room.players.filter(p => p.isAlive);
+  const alivePlayers = (room?.players || []).filter(p => p && p.isAlive);
   const isAlive = myPlayer?.isAlive;
 
   // Calculate vote tallies for final reveal

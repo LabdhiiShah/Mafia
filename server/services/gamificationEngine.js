@@ -70,6 +70,65 @@ class GamificationEngine {
     }
   }
 
+  recordSubcodeFix(roomCode, socketId, playerName) {
+    const room = this.roomStats.get(roomCode);
+    if (!room) return { xpEarned: 0 };
+    const pState = this.getPlayerState(roomCode, socketId, playerName);
+    const xpEarned = 100;
+    pState.xp += xpEarned;
+    room.teamXp += xpEarned;
+    return { xpEarned };
+  }
+
+  recordCorrectVote(roomCode, socketId, playerName) {
+    const room = this.roomStats.get(roomCode);
+    if (!room) return { xpEarned: 0 };
+    const pState = this.getPlayerState(roomCode, socketId, playerName);
+    const xpEarned = 150;
+    pState.xp += xpEarned;
+    if (!pState.badges.includes('MASTER_DETECTIVE')) {
+      pState.badges.push('MASTER_DETECTIVE');
+    }
+    return { xpEarned };
+  }
+
+  recordDirectKillBonus(roomCode, socketId, playerName) {
+    const room = this.roomStats.get(roomCode);
+    if (!room) return { xpEarned: 0 };
+    const pState = this.getPlayerState(roomCode, socketId, playerName);
+    const xpEarned = 250;
+    pState.xp += xpEarned;
+    if (!pState.badges.includes('BUG_HUNTER')) {
+      pState.badges.push('BUG_HUNTER');
+    }
+    return { xpEarned };
+  }
+
+  awardMatchEndXP(roomCode, winner, playersMap = new Map()) {
+    const room = this.roomStats.get(roomCode);
+    if (!room) return;
+
+    for (const playerObj of playersMap.values()) {
+      const pState = this.getPlayerState(roomCode, playerObj.socketId || playerObj.id, playerObj.name);
+      const isCivilianTeam = playerObj.role === 'CIVILIAN' || playerObj.role === 'DETECTIVE' || playerObj.role === 'DEVELOPER' || playerObj.role === 'QA_INSPECTOR';
+      const isMafiaTeam = playerObj.role === 'MAFIA';
+
+      if (winner === 'CIVILIANS' && isCivilianTeam) {
+        pState.xp += 300; // Base match victory bonus
+        if (playerObj.isAlive) pState.xp += 150; // Survival bonus
+        if (playerObj.role === 'DETECTIVE' || playerObj.role === 'QA_INSPECTOR') {
+          pState.xp += 200; // Detective investigation bonus
+        }
+      } else if (winner === 'MAFIA' && isMafiaTeam) {
+        pState.xp += 300; // Mafia sabotage victory bonus
+        if (playerObj.isAlive) pState.xp += 150; // Survival bonus
+      } else {
+        // Consolation participation bonus for good effort
+        pState.xp += 100;
+      }
+    }
+  }
+
   buyHint(roomCode, hintType) {
     const room = this.roomStats.get(roomCode);
     if (!room || room.hintsAvailable <= 0) {

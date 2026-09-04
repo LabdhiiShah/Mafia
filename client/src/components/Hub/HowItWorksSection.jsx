@@ -89,9 +89,6 @@ export function HowItWorksSection() {
 
       {/* 3-Phase Gameplay Loop */}
       <div className="mb-20">
-        <h3 className="font-pixel text-center text-xs text-purple-400 mb-8 tracking-widest">
-          // THE 3 GAMEPLAY PHASES
-        </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {phases.map((p) => {
             const IconComponent = p.icon;
@@ -118,9 +115,6 @@ export function HowItWorksSection() {
 
       {/* Character Roles & Objectives */}
       <div>
-        <h3 className="font-pixel text-center text-xs text-purple-400 mb-8 tracking-widest">
-          // CHARACTER ROLES & SECRET OBJECTIVES
-        </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {roles.map((r) => (
             <div

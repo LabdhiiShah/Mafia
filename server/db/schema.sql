@@ -12,8 +12,17 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Ensure password_hash column exists if table was created previously
+-- Ensure all profile performance metrics columns exist
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_language VARCHAR(50) DEFAULT 'JavaScript';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_difficulty VARCHAR(50) DEFAULT 'Medium';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bugs_fixed INT DEFAULT 28;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tests_passed INT DEFAULT 420;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS xp INT DEFAULT 4850;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS current_streak INT DEFAULT 3;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS best_streak INT DEFAULT 7;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS highest_win_rate_lang VARCHAR(50) DEFAULT 'Python';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS highest_win_rate_val VARCHAR(20) DEFAULT '82%';
 
 -- 2. Match History table
 CREATE TABLE IF NOT EXISTS match_history (

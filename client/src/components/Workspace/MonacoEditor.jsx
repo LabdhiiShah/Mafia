@@ -73,6 +73,7 @@ export default function MonacoEditor({ filename, content, readOnly }) {
   };
 
   const getLanguage = (fname) => {
+    if (!fname || typeof fname !== 'string') return 'javascript';
     if (fname.endsWith('.json')) return 'json';
     if (fname.endsWith('.py')) return 'python';
     if (fname.endsWith('.c')) return 'c';

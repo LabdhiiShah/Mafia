@@ -5,7 +5,7 @@ class AuditLogger {
   constructor() {
     // Map roomCode -> Array of audit events
     this.roomLogs = new Map();
-    // Map roomCode -> Map of filename -> Array of file snapshots { version, content, author, timestamp }
+    // Map roomCode -> Map of filename -> Array of file snapshots { version, content, timestamp, addedCount, removedCount, lineRange }
     this.fileSnapshots = new Map();
   }
 
@@ -17,28 +17,28 @@ class AuditLogger {
       fileMap.set(filename, [{
         version: 1,
         content,
-        authorName: 'System (Initial)',
-        authorId: 'system',
         timestamp: new Date().toISOString(),
-        diff: null
+        lineRange: '1-1',
+        addedCount: 0,
+        removedCount: 0,
+        diffs: null
       }]);
     }
 
     this.fileSnapshots.set(roomCode, fileMap);
     this.logEvent(roomCode, {
       type: 'ROOM_CREATED',
-      authorName: 'System',
-      authorId: 'system',
       detail: 'Game room initialized with starter challenge files.'
     });
   }
 
   logEvent(roomCode, event) {
     const logs = this.roomLogs.get(roomCode) || [];
+    const { authorName, authorId, ...sanitizedEvent } = event;
     const entry = {
       id: uuidv4(),
       timestamp: new Date().toISOString(),
-      ...event
+      ...sanitizedEvent
     };
     logs.push(entry);
     this.roomLogs.set(roomCode, logs);
@@ -53,25 +53,40 @@ class AuditLogger {
     const previousSnapshot = history[history.length - 1];
     const oldContent = previousSnapshot ? previousSnapshot.content : '';
 
-    // Calculate line diffs
+    // Calculate line diffs & affected line numbers
     const lineDiffs = diffLines(oldContent, newContent);
     let addedCount = 0;
     let removedCount = 0;
+    let currentLine = 1;
+    let firstModifiedLine = 1;
+    let foundFirstMod = false;
 
     lineDiffs.forEach(part => {
-      if (part.added) addedCount += part.count || 0;
-      if (part.removed) removedCount += part.count || 0;
+      const lineCount = part.count || (part.value ? part.value.split('\n').length - 1 : 0);
+      if (part.added || part.removed) {
+        if (!foundFirstMod) {
+          firstModifiedLine = currentLine;
+          foundFirstMod = true;
+        }
+        if (part.added) addedCount += lineCount;
+        if (part.removed) removedCount += lineCount;
+      }
+      if (!part.removed) {
+        currentLine += lineCount;
+      }
     });
 
     // Only store snapshot if there are actual diffs
     if (addedCount > 0 || removedCount > 0) {
       const version = history.length + 1;
+      const lastLine = firstModifiedLine + Math.max(0, addedCount - 1);
+      const lineRangeStr = addedCount > 1 || removedCount > 1 ? `lines ${firstModifiedLine}-${lastLine}` : `line ${firstModifiedLine}`;
+
       const snapshot = {
         version,
         filename,
         content: newContent,
-        authorId,
-        authorName,
+        lineRange: lineRangeStr,
         timestamp: new Date().toISOString(),
         addedCount,
         removedCount,
@@ -84,12 +99,11 @@ class AuditLogger {
       this.logEvent(roomCode, {
         type: 'FILE_EDITED',
         filename,
-        authorId,
-        authorName,
         version,
+        lineRange: lineRangeStr,
         addedCount,
         removedCount,
-        detail: `Modified ${filename} (+${addedCount} / -${removedCount} lines)`
+        detail: `Modified "${filename}" on ${lineRangeStr} (+${addedCount} / -${removedCount} lines)`
       });
     }
   }
@@ -97,22 +111,18 @@ class AuditLogger {
   logTestRun(roomCode, authorId, authorName, testResults) {
     this.logEvent(roomCode, {
       type: 'TEST_RUN',
-      authorId,
-      authorName,
       passed: testResults.passed,
       failed: testResults.failed,
       total: testResults.total,
       passRate: testResults.passRate,
-      detail: `Ran test suite: ${testResults.passed}/${testResults.total} passed (${testResults.passRate}%)`
+      detail: `Executed test suite: ${testResults.passed}/${testResults.total} passed (${testResults.passRate}%)`
     });
   }
 
   logVote(roomCode, voterName, targetName) {
     this.logEvent(roomCode, {
       type: 'PLAYER_VOTED',
-      voterName,
-      targetName,
-      detail: `${voterName} voted to eliminate ${targetName || 'Skip'}`
+      detail: `Anonymous vote recorded during Voting Phase.`
     });
   }
 

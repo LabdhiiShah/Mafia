@@ -37,6 +37,15 @@ app.post('/api/auth/login', authController.login);
 app.get('/api/auth/me', authController.getMe);
 
 // REST API Endpoints
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const list = await db.getLeaderboard();
+    res.json(list);
+  } catch (err) {
+    res.status(500).json([]);
+  }
+});
+
 app.get('/api/challenges', (req, res) => {
   const challengeList = Object.values(challenges).map(c => ({
     id: c.id,
@@ -60,20 +69,28 @@ app.get('/api/room/:code/diffs/:filename', (req, res) => {
   res.json(history);
 });
 
-app.get('/api/leaderboard', async (req, res) => {
-  const leaderboard = await db.getLeaderboard();
-  res.json(leaderboard);
+app.get('/api/user/profile/:username', async (req, res) => {
+  try {
+    const { username } = req.params;
+    const profile = await db.getUserProfile(username);
+    res.json({ success: true, profile });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.get('/api/stats/online', async (req, res) => {
+app.put('/api/user/profile', async (req, res) => {
   try {
-    const totalRegistered = await db.getUserCount();
-    const activeSockets = io.sockets.sockets ? io.sockets.sockets.size : 0;
-    const onlineCount = Math.max(activeSockets, totalRegistered);
-    res.json({ onlinePlayers: onlineCount, activeSockets, totalRegistered });
+    const { currentUsername, newUsername, avatar, preferred_language, preferred_difficulty } = req.body;
+    const updated = await db.updateUserProfile(currentUsername || newUsername, {
+      newUsername,
+      avatar,
+      preferred_language,
+      preferred_difficulty
+    });
+    res.json({ success: true, profile: updated });
   } catch (err) {
-    const activeSockets = io.sockets.sockets ? io.sockets.sockets.size : 0;
-    res.json({ onlinePlayers: activeSockets || 1, activeSockets });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -96,11 +113,9 @@ io.on('connection', (socket) => {
 
       auditLogger.logEvent(room.code, {
         type: 'ROOM_CREATED',
-        authorName: player.name,
-        authorId: player.id,
-        detail: `${player.name} created room ${room.code} (${room.settings.challengeName} - ${room.settings.language.toUpperCase()})`
+        detail: `Room ${room.code} created (${room.settings.challengeName} - ${room.settings.language.toUpperCase()})`
       });
-      db.saveAuditLog(room.code, 'ROOM_CREATED', player.name, `${player.name} created room ${room.code}`);
+      db.saveAuditLog(room.code, 'ROOM_CREATED', 'Anonymous', `Room ${room.code} created`);
 
       const serialized = roomManager.serializeRoom(room, socket.id);
       if (callback) callback({ success: true, room: serialized });
@@ -121,6 +136,31 @@ io.on('connection', (socket) => {
       }
 
       if (room.status !== 'LOBBY') {
+        // Check if player is reconnecting to an ongoing or finished room (match by handle or socket)
+        let existingPlayer = Array.from(room.players.values()).find(
+          p => p.name === playerName || p.socketId === socket.id
+        );
+
+        if (existingPlayer) {
+          if (existingPlayer.socketId !== socket.id) {
+            room.players.delete(existingPlayer.socketId);
+            existingPlayer.socketId = socket.id;
+            room.players.set(socket.id, existingPlayer);
+          }
+          socket.join(room.code);
+          const serialized = roomManager.serializeRoom(room, socket.id);
+          if (callback) callback({ success: true, room: serialized, reconnected: true });
+          gameStateEngine.broadcastRoomUpdate(room.code);
+          return;
+        }
+
+        if (room.status === 'GAME_OVER') {
+          socket.join(room.code);
+          const serialized = roomManager.serializeRoom(room, socket.id);
+          if (callback) callback({ success: true, room: serialized });
+          return;
+        }
+
         if (callback) callback({ success: false, error: 'Game is already in progress' });
         return;
       }
@@ -137,11 +177,9 @@ io.on('connection', (socket) => {
 
       auditLogger.logEvent(room.code, {
         type: 'PLAYER_JOINED',
-        authorName: player.name,
-        authorId: player.id,
-        detail: `${player.name} joined room ${room.code}.`
+        detail: `Player connected to room ${room.code}.`
       });
-      db.saveAuditLog(room.code, 'PLAYER_JOINED', player.name, `${player.name} joined room ${room.code}.`);
+      db.saveAuditLog(room.code, 'PLAYER_JOINED', 'Anonymous', `Player connected to room ${room.code}.`);
 
       const serialized = roomManager.serializeRoom(room, socket.id);
       if (callback) callback({ success: true, room: serialized });
@@ -183,11 +221,9 @@ io.on('connection', (socket) => {
 
       auditLogger.logEvent(room.code, {
         type: 'PLAYER_JOINED',
-        authorName: player.name,
-        authorId: player.id,
-        detail: `${player.name} joined public room ${room.code} via Quick Match.`
+        detail: `Player connected to public room ${room.code} via Quick Match.`
       });
-      db.saveAuditLog(room.code, 'PLAYER_JOINED', player.name, `${player.name} joined public room ${room.code} via Quick Match.`);
+      db.saveAuditLog(room.code, 'PLAYER_JOINED', 'Anonymous', `Player connected to public room ${room.code} via Quick Match.`);
 
       const serialized = roomManager.serializeRoom(room, socket.id);
       if (callback) callback({ success: true, room: serialized, isHost: false });
@@ -203,7 +239,10 @@ io.on('connection', (socket) => {
     const room = roomManager.getRoom(roomCode);
     if (!room) return;
 
-    const player = room.players.get(socket.id);
+    let player = room.players.get(socket.id);
+    if (!player) {
+      player = Array.from(room.players.values()).find(p => p.socketId === socket.id || p.id === socket.id);
+    }
     if (player) {
       player.isReady = !player.isReady;
       gameStateEngine.broadcastRoomUpdate(roomCode);
@@ -215,9 +254,13 @@ io.on('connection', (socket) => {
     const room = roomManager.getRoom(roomCode);
     if (!room) return;
 
-    const player = room.players.get(socket.id);
-    if (player && player.isHost) {
-      db.saveAuditLog(roomCode, 'GAME_STARTED', player.name, `Host ${player.name} started the game match.`);
+    let player = room.players.get(socket.id);
+    if (!player) {
+      player = Array.from(room.players.values()).find(p => p.socketId === socket.id || p.id === socket.id || p.isHost);
+    }
+    const isHost = player && (player.isHost || room.hostId === player.id || room.hostId === player.socketId);
+    if (isHost) {
+      db.saveAuditLog(roomCode, 'GAME_STARTED', 'Anonymous', `Game match started.`);
       gameStateEngine.startGame(roomCode);
     }
   });
@@ -301,14 +344,12 @@ io.on('connection', (socket) => {
       room.timerSeconds = Math.max(0, room.timerSeconds - 15);
       auditLogger.logEvent(roomCode, {
         type: 'RISKY_RUN_FAILED',
-        authorName: player.name,
-        authorId: player.id,
-        detail: `🧪 ${player.name} attempted a Risky Test Run and failed! -15s Sprint Timer penalty applied!`
+        detail: `🧪 Risky Test Run failed! -15s Sprint Timer penalty applied!`
       });
     }
 
     auditLogger.logTestRun(roomCode, player.id, player.name, results);
-    db.saveAuditLog(roomCode, 'TEST_RUN', player.name, `Ran tests (${isRiskyRun ? 'RISKY RUN' : 'NORMAL'}): ${results.passed}/${results.total} passed (+${xpResult.xpEarned} XP)`);
+    db.saveAuditLog(roomCode, 'TEST_RUN', 'Anonymous', `Ran tests (${isRiskyRun ? 'RISKY RUN' : 'NORMAL'}): ${results.passed}/${results.total} passed (+${xpResult.xpEarned} XP)`);
 
     if (callback) callback({ ...results, xpEarned: xpResult.xpEarned, streak: xpResult.currentStreak, multiplier: xpResult.multiplier });
 
@@ -347,11 +388,9 @@ io.on('connection', (socket) => {
 
       auditLogger.logEvent(roomCode, {
         type: 'HINT_UNLOCKED',
-        authorName: player.name,
-        authorId: player.id,
-        detail: `${player.name} purchased Hint (${hintType}) for ${result.cost} XP!`
+        detail: `Hint (${hintType}) purchased for ${result.cost} XP!`
       });
-      db.saveAuditLog(roomCode, 'HINT_UNLOCKED', player.name, `${player.name} purchased ${hintType} hint for ${result.cost} XP.`);
+      db.saveAuditLog(roomCode, 'HINT_UNLOCKED', 'Anonymous', `Purchased ${hintType} hint for ${result.cost} XP.`);
 
       io.to(roomCode).emit('hint_unlocked', {
         hintType,
@@ -415,11 +454,9 @@ io.on('connection', (socket) => {
 
     auditLogger.logEvent(roomCode, {
       type: 'CHAT_MESSAGE',
-      authorName: player.name,
-      authorId: player.id,
-      detail: `${player.name}: ${message}`
+      detail: `Anonymous chat message: ${message}`
     });
-    db.saveAuditLog(roomCode, 'CHAT_MESSAGE', player.name, `${player.name}: ${message}`);
+    db.saveAuditLog(roomCode, 'CHAT_MESSAGE', 'Anonymous', `Anonymous chat message: ${message}`);
 
     io.to(roomCode).emit('chat_received', chatPayload);
   });
@@ -488,9 +525,7 @@ io.on('connection', (socket) => {
 
               auditLogger.logEvent(roomCode, {
                 type: 'SUBCODE_FAILED',
-                authorName: 'System',
-                authorId: 'system',
-                detail: `☣️ ${p.name} failed to resolve Subcode Outbreak in 30 seconds and was ELIMINATED!`
+                detail: `☣️ Subcode Outbreak timer expired! Player eliminated.`
               });
 
               io.to(roomCode).emit('elimination_result', {
@@ -508,9 +543,7 @@ io.on('connection', (socket) => {
 
       auditLogger.logEvent(roomCode, {
         type: 'MAFIA_SABOTAGE',
-        authorName: player.name,
-        authorId: player.id,
-        detail: `☣️ MAFIA SABOTAGE: ${player.name} unleashed Subcode Outbreak! Non-Mafia members have 30s to fix subcodes or face elimination!`
+        detail: `☣️ MAFIA SABOTAGE: Subcode Outbreak unleashed! Non-Mafia members have 30s to fix subcodes or face elimination!`
       });
 
       if (callback) callback({ success: true, powerId });
@@ -521,9 +554,7 @@ io.on('connection', (socket) => {
 
       auditLogger.logEvent(roomCode, {
         type: 'MAFIA_SABOTAGE',
-        authorName: player.name,
-        authorId: player.id,
-        detail: `⏳ MAFIA SABOTAGE: ${player.name} activated Chronos Drain! -10 seconds subtracted from Sprint Timer!`
+        detail: `⏳ MAFIA SABOTAGE: Chronos Drain activated! -10 seconds subtracted from Sprint Timer!`
       });
 
       if (callback) callback({ success: true, powerId, newTimer: room.timerSeconds });
@@ -544,8 +575,6 @@ io.on('connection', (socket) => {
 
       auditLogger.logEvent(roomCode, {
         type: 'MAFIA_SABOTAGE',
-        authorName: player.name,
-        authorId: player.id,
         detail: `🔴 MAFIA SABOTAGE: Phantom Fault line decoration injected on file "${filename}" line ${line}.`
       });
 
@@ -576,18 +605,304 @@ io.on('connection', (socket) => {
 
     if (isFixed) {
       delete room.sabotageState.activeSubcodes[socket.id];
+      const xpRes = gamification.recordSubcodeFix(roomCode, socket.id, player ? player.name : 'Operative');
+      
       auditLogger.logEvent(roomCode, {
         type: 'SUBCODE_RESOLVED',
-        authorName: player ? player.name : 'Operative',
-        authorId: player ? player.id : socket.id,
-        detail: `✅ ${player ? player.name : 'Operative'} successfully debugged their Subcode Outbreak challenge!`
+        detail: `✅ Subcode Outbreak challenge successfully debugged! (+${xpRes.xpEarned} XP)`
       });
 
-      if (callback) callback({ success: true });
+      if (callback) callback({ success: true, xpEarned: xpRes.xpEarned });
       socket.emit('subcode_resolved');
       gameStateEngine.broadcastRoomUpdate(roomCode);
     } else {
       if (callback) callback({ success: false, error: 'Incorrect fix. Inspect your code changes!' });
+    }
+  });
+
+  // Detective Direct Kill (Vigilante Strike)
+  socket.on('detective_direct_kill', ({ roomCode, targetSocketId }, callback) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) {
+      if (callback) callback({ success: false, error: 'Room not found' });
+      return;
+    }
+
+    let player = room.players.get(socket.id);
+    if (!player) {
+      for (const p of room.players.values()) {
+        if (p.socketId === socket.id || p.id === socket.id || p.role === 'DETECTIVE' || p.role === 'QA_INSPECTOR') {
+          player = p;
+          break;
+        }
+      }
+    }
+
+    const isDetective = player && player.role !== 'MAFIA' && player.isAlive;
+    if (!isDetective) {
+      if (callback) callback({ success: false, error: 'Only living Detectives/Civilians can activate Direct Kill' });
+      return;
+    }
+
+    if (room.status !== 'CODING_PHASE' && room.status !== 'DISCUSSION_PHASE') {
+      if (callback) callback({ success: false, error: 'Direct Kill can only be used during Coding or Discussion Phase' });
+      return;
+    }
+
+    if (!room.detectiveState) {
+      room.detectiveState = { usedDirectKill: false, usedProtect: false, protectedSocketId: null, sacrificialSavePending: false, sacrificialSaveAccepted: false, sacrificialSaveVotes: {} };
+    }
+
+    if (room.detectiveState.usedDirectKill) {
+      if (callback) callback({ success: false, error: 'Direct Kill power has already been used this match' });
+      return;
+    }
+
+    let targetPlayer = room.players.get(targetSocketId);
+    if (!targetPlayer) {
+      for (const p of room.players.values()) {
+        if (p.socketId === targetSocketId || p.id === targetSocketId || p.name === targetSocketId) {
+          targetPlayer = p;
+          break;
+        }
+      }
+    }
+
+    if (!targetPlayer || !targetPlayer.isAlive) {
+      if (callback) callback({ success: false, error: 'Invalid or already eliminated target' });
+      return;
+    }
+
+    room.detectiveState.usedDirectKill = true;
+
+    if (targetPlayer.role === 'MAFIA') {
+      targetPlayer.isAlive = false;
+      room.eliminatedPlayers.push({
+        id: targetPlayer.id,
+        name: targetPlayer.name,
+        role: targetPlayer.role,
+        round: room.round
+      });
+
+      room.status = 'GAME_OVER';
+      room.winner = 'CIVILIANS';
+      room.winningReason = `🕵️ DETECTIVE DIRECT KILL SUCCESS: Detective ${player.name} executed Mafia saboteur ${targetPlayer.name}! Civilians win the match!`;
+
+      auditLogger.logEvent(roomCode, {
+        type: 'DETECTIVE_KILL_SUCCESS',
+        detail: `🕵️ DETECTIVE DIRECT KILL SUCCESS: Detective executed Mafia saboteur!`
+      });
+
+      io.to(roomCode).emit('room_announcement', {
+        id: uuidv4(),
+        type: 'DETECTIVE_KILL_SUCCESS',
+        title: '🕵️ DIRECT KILL SUCCESS!',
+        message: 'Mafia was killed by Detective! Civilians win the match!',
+        sprite: '/sprites/detective.png',
+        icon: '🎯',
+        theme: 'EMERALD'
+      });
+
+      if (callback) callback({ success: true, isMafia: true, targetName: targetPlayer.name });
+      gameStateEngine.endGame(roomCode);
+    } else {
+      // Innocent Misfire: Both target AND Detective are eliminated!
+      targetPlayer.isAlive = false;
+      player.isAlive = false;
+
+      room.eliminatedPlayers.push({
+        id: targetPlayer.id,
+        name: targetPlayer.name,
+        role: targetPlayer.role,
+        round: room.round
+      });
+
+      room.eliminatedPlayers.push({
+        id: player.id,
+        name: player.name,
+        role: player.role,
+        round: room.round
+      });
+
+      room.detectiveState.sacrificialSavePending = true;
+      room.detectiveState.sacrificialSaveVotes = {};
+
+      auditLogger.logEvent(roomCode, {
+        type: 'DETECTIVE_MISFIRE',
+        detail: `💥 DETECTIVE MISFIRE: Detective accidentally executed Innocent! Both have been eliminated!`
+      });
+
+      io.to(roomCode).emit('detective_misfire', {
+        detectiveName: player.name,
+        detectiveSocketId: player.socketId,
+        targetName: targetPlayer.name,
+        targetSocketId: targetPlayer.socketId
+      });
+
+      io.to(roomCode).emit('room_announcement', {
+        id: uuidv4(),
+        type: 'DETECTIVE_KILL_MISFIRE',
+        title: '💥 DETECTIVE MISFIRE & SUICIDE!',
+        message: 'Innocent was killed and Detective suicided!',
+        sprite: '/sprites/detective.png',
+        icon: '💥',
+        theme: 'RED'
+      });
+
+      if (callback) callback({ success: true, isMafia: false, targetName: targetPlayer.name, detectiveName: player.name });
+      gameStateEngine.checkVictoryConditions(roomCode);
+      gameStateEngine.broadcastRoomUpdate(roomCode);
+    }
+  });
+
+  // Detective Protective Shield
+  socket.on('detective_protect_player', ({ roomCode, targetSocketId }, callback) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) {
+      if (callback) callback({ success: false, error: 'Room not found' });
+      return;
+    }
+
+    let player = room.players.get(socket.id);
+    if (!player) {
+      for (const p of room.players.values()) {
+        if (p.socketId === socket.id || p.id === socket.id || p.role === 'DETECTIVE' || p.role === 'QA_INSPECTOR') {
+          player = p;
+          break;
+        }
+      }
+    }
+
+    const isDetective = player && (player.role === 'DETECTIVE' || player.role === 'QA_INSPECTOR') && player.isAlive;
+    if (!isDetective) {
+      if (callback) callback({ success: false, error: 'Only living Detectives can activate Protective Shield' });
+      return;
+    }
+
+    if (!room.detectiveState) {
+      room.detectiveState = { usedDirectKill: false, usedProtect: false, protectedSocketId: null, sacrificialSavePending: false, sacrificialSaveAccepted: false, sacrificialSaveVotes: {} };
+    }
+
+    let targetPlayer = room.players.get(targetSocketId);
+    if (!targetPlayer) {
+      for (const p of room.players.values()) {
+        if (p.socketId === targetSocketId || p.id === targetSocketId || p.name === targetSocketId) {
+          targetPlayer = p;
+          break;
+        }
+      }
+    }
+
+    const protTargetId = targetPlayer ? targetPlayer.socketId : targetSocketId;
+    room.detectiveState.usedProtect = true;
+    room.detectiveState.protectedSocketId = protTargetId;
+
+    auditLogger.logEvent(roomCode, {
+      type: 'DETECTIVE_PROTECT',
+      detail: `🛡️ Detective activated Protective Shield for this round.`
+    });
+
+    if (callback) callback({ success: true, targetName: targetPlayer ? targetPlayer.name : 'Target' });
+    gameStateEngine.broadcastRoomUpdate(roomCode);
+  });
+
+  // Innocents Revive Power (Sacrificial Save)
+  socket.on('vote_sacrificial_save', ({ roomCode, acceptSave, targetChoice, targetReviveId }, callback) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room || !room.detectiveState?.sacrificialSavePending) {
+      if (callback) callback({ success: false, error: 'No active revive opportunity' });
+      return;
+    }
+
+    const player = room.players.get(socket.id);
+    if (!player || player.role === 'MAFIA' || !player.isAlive) {
+      if (callback) callback({ success: false, error: 'Only living Innocents can use the Revive power' });
+      return;
+    }
+
+    if (room.votes.has(socket.id)) {
+      if (callback) callback({ success: false, error: 'You have already used your vote/revive action for this round' });
+      return;
+    }
+
+    let choice = targetChoice;
+    if (!choice && typeof acceptSave === 'string') choice = acceptSave;
+    if (!choice && typeof acceptSave === 'boolean') choice = acceptSave ? 'DETECTIVE' : 'DECLINE';
+
+    if (choice === 'DECLINE') {
+      if (callback) callback({ success: true, resurrected: false });
+      return;
+    }
+
+    const incident = room.detectiveState.misfireIncident;
+    let targetPlayer = null;
+
+    if (choice === 'DETECTIVE') {
+      targetPlayer = Array.from(room.players.values()).find(p => p.role === 'DETECTIVE' || p.role === 'QA_INSPECTOR' || (incident && p.id === incident.detectiveId));
+    } else if (choice === 'INNOCENT') {
+      targetPlayer = Array.from(room.players.values()).find(p => incident && (p.id === incident.innocentId || p.socketId === incident.innocentSocketId || p.name === incident.innocentName));
+    } else if (targetReviveId) {
+      targetPlayer = room.players.get(targetReviveId);
+      if (!targetPlayer) {
+        for (const p of room.players.values()) {
+          if (p.id === targetReviveId || p.socketId === targetReviveId || p.name === targetReviveId) {
+            targetPlayer = p;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!targetPlayer) {
+      if (callback) callback({ success: false, error: 'Target player for revive not found' });
+      return;
+    }
+
+    // Revive target player!
+    targetPlayer.isAlive = true;
+    room.eliminatedPlayers = (room.eliminatedPlayers || []).filter(p => p.id !== targetPlayer.id && p.name !== targetPlayer.name);
+
+    // Consume voting power for the user who cast the revive
+    room.votes.set(socket.id, 'REVIVE_ACTION');
+
+    // Consume revive opportunity so both cannot be revived
+    room.detectiveState.sacrificialSavePending = false;
+    room.detectiveState.sacrificialSaveAccepted = true;
+    room.detectiveState.revivedPlayerId = targetPlayer.id;
+
+    auditLogger.logEvent(roomCode, {
+      type: 'REVIVE_SUCCESS',
+      detail: `🕯️ INNOCENT REVIVE POWER USED: ${targetPlayer.name} was revived back to life by Innocents!`
+    });
+
+    io.to(roomCode).emit('detective_resurrected', {
+      detectiveName: targetPlayer.name,
+      detectiveSocketId: targetPlayer.socketId,
+      revivedRole: targetPlayer.role
+    });
+
+    io.to(roomCode).emit('room_announcement', {
+      id: uuidv4(),
+      type: 'PLAYER_REVIVED',
+      title: '🕯️ PLAYER REVIVED!',
+      message: `${targetPlayer.name} has been revived and returned to the team!`,
+      sprite: '/sprites/detective.png',
+      icon: '✨',
+      theme: 'EMERALD'
+    });
+
+    if (callback) callback({ success: true, resurrected: true, revivedName: targetPlayer.name });
+    gameStateEngine.broadcastRoomUpdate(roomCode);
+  });
+
+  // Play Again (Reset Room to Lobby)
+  socket.on('play_again', ({ roomCode }, callback) => {
+    const room = roomManager.resetRoomToLobby(roomCode);
+    if (room) {
+      if (callback) callback({ success: true });
+      gameStateEngine.broadcastRoomUpdate(roomCode);
+    } else {
+      if (callback) callback({ success: false, error: 'Room not found' });
     }
   });
 
@@ -598,9 +913,7 @@ io.on('connection', (socket) => {
       const { room, player } = res;
       auditLogger.logEvent(room.code, {
         type: 'PLAYER_LEFT',
-        authorName: player.name,
-        authorId: player.id,
-        detail: `${player.name} left the room.`
+        detail: `Player disconnected from room.`
       });
       gameStateEngine.broadcastRoomUpdate(room.code);
     }

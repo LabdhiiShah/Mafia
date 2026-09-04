@@ -4,7 +4,9 @@ import MonacoEditor from './MonacoEditor';
 import TestRunnerPanel from './TestRunnerPanel';
 import AuditTimeline from './AuditTimeline';
 import MafiaSabotagePanel from './MafiaSabotagePanel';
+import DetectivePanel from './DetectivePanel';
 import SubcodeChallengeModal from './SubcodeChallengeModal';
+import SacrificialSaveModal from '../Game/SacrificialSaveModal';
 import { FolderTree, FileCode, Play, Eye, Terminal, Lock } from 'lucide-react';
 
 export default function IDEWorkspace() {
@@ -28,6 +30,12 @@ export default function IDEWorkspace() {
 
       {/* Floating Mafia Sabotage Control Panel (bottom-right for alive Mafia) */}
       <MafiaSabotagePanel />
+
+      {/* Floating Detective Action Panel */}
+      <DetectivePanel />
+
+      {/* Sacrificial Save Modal for Innocents */}
+      <SacrificialSaveModal />
 
       {/* Audit Diff Inspector Overlay Modal */}
       {showAuditModal && (
@@ -54,7 +62,7 @@ export default function IDEWorkspace() {
             <div className="p-2 space-y-1">
               {fileList.map((filename) => {
                 const isActive = filename === activeFile;
-                const isTest = filename.endsWith('.test.js') || filename.endsWith('.test.py');
+                const isTest = typeof filename === 'string' && (filename.endsWith('.test.js') || filename.endsWith('.test.py'));
                 return (
                   <button
                     key={filename}
